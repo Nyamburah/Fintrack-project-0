@@ -2,21 +2,32 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
+const ngrokMiddleware = require('./middleware/ngrokMiddleware'); // Add this line
 
 const app = express(); 
 const port = process.env.PORT || 8000;
 
-// Middleware
-app.use(cors({
-  origin: ['http://localhost:5173', 'http://localhost:3000'], // Support both ports
-  credentials: true
-}));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Add ngrok middleware BEFORE other middleware
+app.use(ngrokMiddleware);
 
-// Request logging middleware
+// CORS configuration
+app.use(cors({
+  origin: 'http://localhost:5173',
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
+// Body parsing middleware
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// Add request logging for debugging
 app.use((req, res, next) => {
-  console.log(`${req.method} ${req.path} - ${new Date().toISOString()}`);
+  console.log(`${req.method} ${req.path}`, {
+    headers: req.headers,
+    body: req.body
+  });
   next();
 });
 
@@ -26,6 +37,10 @@ mongoose.connect(process.env.MONGO_URI)
   .catch(err => console.error('❌ Database connection error:', err));
 
 // Health check endpoint
+app.get('/health', (req, res) => {
+  res.json({ status: 'OK', timestamp: new Date().toISOString() });
+});
+
 app.get('/', (req, res) => {
   res.json({ 
     status: 'OK', 
@@ -44,28 +59,16 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Routes
+// Your routes
+app.use('/api/mpesa', require('./routes/mpesa'));
+app.use('/auth', require('./routes/auth'));
 app.use('/api/categories', require('./routes/categories'));
 app.use('/api/transactions', require('./routes/transactions'));
-app.use('/auth', require('./routes/authroutes')); // Keep your existing auth routes
-
-// M-Pesa routes
-try {
-  const mpesaRoutes = require('./routes/mpesaRoutes');
-  app.use('/api/mpesa', mpesaRoutes);
-  console.log('✅ M-Pesa routes loaded successfully');
-} catch (error) {
-  console.error('❌ Error loading M-Pesa routes:', error.message);
-  console.log('⚠️  Make sure you have created the mpesaRoutes.js file');
-}
 
 // Error handling middleware
 app.use((err, req, res, next) => {
-  console.error('Error:', err.stack);
-  res.status(500).json({ 
-    error: 'Something went wrong!',
-    message: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
-  });
+  console.error('Error:', err);
+  res.status(500).json({ error: 'Internal server error' });
 });
 
 // 404 handler
@@ -73,17 +76,6 @@ app.use('*', (req, res) => {
   res.status(404).json({ error: 'API endpoint not found' });
 });
 
-app.listen(port, '0.0.0.0', () => {
-  console.log(`🚀 Server running on http://localhost:${port}`);
-  console.log(`📊 API Health: http://localhost:${port}/api/health`);
-  console.log(`💰 Currency: KSH (Kenyan Shillings)`);
-  console.log(`📱 M-Pesa API: http://localhost:${port}/api/mpesa`);
-  
-  // Log environment variables status
-  console.log('\n🔧 Environment Check:');
-  console.log(`   MongoDB URI: ${process.env.MONGO_URI ? '✅ Set' : '❌ Missing'}`);
-  console.log(`   M-Pesa Consumer Key: ${process.env.MPESA_CONSUMER_KEY ? '✅ Set' : '❌ Missing'}`);
-  console.log(`   M-Pesa Consumer Secret: ${process.env.MPESA_CONSUMER_SECRET ? '✅ Set' : '❌ Missing'}`);
-  console.log(`   M-Pesa Business Shortcode: ${process.env.MPESA_BUSINESS_SHORTCODE ? '✅ Set' : '❌ Missing'}`);
-  console.log(`   M-Pesa Environment: ${process.env.MPESA_ENVIRONMENT || 'sandbox'}`);
+app.listen(port, () => {
+  console.log(`Server running on port ${port}`);
 });

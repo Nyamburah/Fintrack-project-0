@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
 /**
  * Transaction structure:
@@ -27,8 +27,14 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 // Transaction API Service
 class TransactionAPI {
   constructor() {
+    // Use import.meta.env for Vite or check if process exists
     // eslint-disable-next-line no-undef
-    this.baseURL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
+    const apiUrl = typeof process !== 'undefined' && process.env 
+      // eslint-disable-next-line no-undef
+      ? process.env.REACT_APP_API_URL 
+      : import.meta.env?.VITE_API_URL || 'http://localhost:8000/api';
+    
+    this.baseURL = apiUrl;
   }
 
   // Get auth token from localStorage
@@ -143,89 +149,10 @@ export const DataProvider = ({ children }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // Fetch transactions on component mount
-  useEffect(() => {
-    fetchTransactions();
-  }, [fetchTransactions]);
-
-  // Update category spending when transactions change
-  useEffect(() => {
-    updateCategorySpending();
-  }, [transactions, updateCategorySpending]);
-
-  /**
-   * Fetch transactions from M-Pesa API
-   * Falls back to mock data if API is unavailable
-   */
-  // eslint-disable-next-line react-hooks/exhaustive-deps, no-undef
-  const fetchTransactions = useCallback(async (filters = {}) => {
-    setLoading(true);
-    setError(null);
-    
-    try {
-      // Check if user is authenticated
-      const authToken = transactionAPI.getAuthToken();
-      
-      if (!authToken) {
-        // Use mock data if not authenticated
-        setTransactions(getMockTransactions());
-        return;
-      }
-
-      const response = await transactionAPI.fetchTransactions(filters);
-      
-      if (response.success) {
-        setTransactions(response.transactions);
-      } else {
-        throw new Error('Failed to fetch transactions');
-      }
-    } catch (error) {
-      console.warn('API unavailable, using mock data:', error.message);
-      // Fall back to mock data
-      setTransactions(getMockTransactions());
-      setError(null); // Don't show error for fallback
-    } finally {
-      setLoading(false);
-    }
-  });
-
-  /**
-   * Sync transactions from M-Pesa
-   * TODO: Integrate with backend API
-   */
-  const syncTransactions = async () => {
-    setLoading(true);
-    setError(null);
-    
-    try {
-      const authToken = transactionAPI.getAuthToken();
-      
-      if (!authToken) {
-        throw new Error('Authentication required for sync');
-      }
-
-      const response = await transactionAPI.syncTransactions();
-      
-      if (response.success) {
-        // Refresh transactions after sync
-        await fetchTransactions();
-        return response;
-      } else {
-        throw new Error('Failed to sync transactions');
-      }
-    } catch (error) {
-      console.error('Error syncing transactions:', error);
-      setError(error.message || 'Failed to sync transactions');
-      throw error;
-    } finally {
-      setLoading(false);
-    }
-  };
-
   /**
    * Get mock transactions for development/fallback
    */
-  const getMockTransactions = () => {
+  const getMockTransactions = useCallback(() => {
     return [
       {
         id: '1',
@@ -282,11 +209,99 @@ export const DataProvider = ({ children }) => {
         status: 'completed'
       }
     ];
+  }, []);
+
+  /**
+   * Fetch transactions from M-Pesa API
+   * Falls back to mock data if API is unavailable
+   */
+  const fetchTransactions = useCallback(async (filters = {}) => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      // Check if user is authenticated
+      const authToken = transactionAPI.getAuthToken();
+      
+      if (!authToken) {
+        // Use mock data if not authenticated
+        setTransactions(getMockTransactions());
+        return;
+      }
+
+      const response = await transactionAPI.fetchTransactions(filters);
+      
+      if (response.success) {
+        setTransactions(response.transactions);
+      } else {
+        throw new Error('Failed to fetch transactions');
+      }
+    } catch (error) {
+      console.warn('API unavailable, using mock data:', error.message);
+      // Fall back to mock data
+      setTransactions(getMockTransactions());
+      setError(null); // Don't show error for fallback
+    } finally {
+      setLoading(false);
+    }
+  }, [getMockTransactions]);
+
+  /**
+   * Updates category "spent" totals based on current transactions
+   */
+  const updateCategorySpending = useCallback(() => {
+    setCategories(prev => prev.map(category => {
+      const spent = transactions
+        .filter(t => t.category === category.id && t.type === 'expense')
+        .reduce((sum, t) => sum + t.amount, 0);
+      return { ...category, spent };
+    }));
+  }, [transactions]);
+
+  // Fetch transactions on component mount
+  useEffect(() => {
+    fetchTransactions();
+  }, [fetchTransactions]);
+
+  // Update category spending when transactions change
+  useEffect(() => {
+    updateCategorySpending();
+  }, [updateCategorySpending]);
+
+  /**
+   * Sync transactions from M-Pesa
+   */
+  const syncTransactions = async () => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const authToken = transactionAPI.getAuthToken();
+      
+      if (!authToken) {
+        throw new Error('Authentication required for sync');
+      }
+
+      const response = await transactionAPI.syncTransactions();
+      
+      if (response.success) {
+        // Refresh transactions after sync
+        await fetchTransactions();
+        return response;
+      } else {
+        throw new Error('Failed to sync transactions');
+      }
+    } catch (error) {
+      console.error('Error syncing transactions:', error);
+      setError(error.message || 'Failed to sync transactions');
+      throw error;
+    } finally {
+      setLoading(false);
+    }
   };
 
   /**
    * Adds a new transaction
-   * TODO: Integrate with backend API (POST /api/transactions)
    */
   const addTransaction = (transaction) => {
     const newTransaction = {
@@ -297,9 +312,6 @@ export const DataProvider = ({ children }) => {
     };
 
     setTransactions(prev => [newTransaction, ...prev]);
-
-    // Backend API call placeholder:
-    // fetch('/api/transactions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newTransaction) });
   };
 
   /**
@@ -336,7 +348,6 @@ export const DataProvider = ({ children }) => {
 
   /**
    * Adds a new category
-   * TODO: Integrate with backend API (POST /api/categories)
    */
   const addCategory = (category) => {
     const newCategory = {
@@ -346,13 +357,10 @@ export const DataProvider = ({ children }) => {
     };
 
     setCategories(prev => [...prev, newCategory]);
-    // Backend API call placeholder:
-    // fetch('/api/categories', ...)
   };
 
   /**
    * Updates a category by ID
-   * TODO: Integrate with backend API (PUT /api/categories/:id)
    */
   const updateCategory = (id, updates) => {
     setCategories(prev =>
@@ -362,20 +370,6 @@ export const DataProvider = ({ children }) => {
           : category
       )
     );
-  };
-
-  /**
-   * Updates category "spent" totals based on current transactions
-   */
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const updateCategorySpending = () => {
-    const updated = categories.map(category => {
-      const spent = transactions
-        .filter(t => t.category === category.id && t.type === 'expense')
-        .reduce((sum, t) => sum + t.amount, 0);
-      return { ...category, spent };
-    });
-    setCategories(updated);
   };
 
   /**
@@ -415,10 +409,9 @@ export const DataProvider = ({ children }) => {
         startDate = new Date(now.getFullYear(), now.getMonth(), 1);
         break;
       case 'quarterly':
-        // eslint-disable-next-line no-case-declarations
-        const quarter = Math.floor(now.getMonth() / 3);
+        { const quarter = Math.floor(now.getMonth() / 3);
         startDate = new Date(now.getFullYear(), quarter * 3, 1);
-        break;
+        break; }
       case 'annual':
         startDate = new Date(now.getFullYear(), 0, 1);
         break;
@@ -523,7 +516,6 @@ export const DataProvider = ({ children }) => {
 /**
  * Custom hook to consume the DataContext safely
  */
-// eslint-disable-next-line react-refresh/only-export-components
 export const useData = () => {
   const context = useContext(DataContext);
   if (context === undefined) {

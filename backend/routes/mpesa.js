@@ -2,14 +2,82 @@ const express = require('express');
 const router = express.Router();
 const { MongoClient } = require('mongodb');
 const mpesaService = require('../services/mpesaService');
-const Transaction = require('../models/Transaction');
-const User = require('../models/User');
-const auth = require('../middleware/auth'); // Assuming you have auth middleware
+const Transaction = require('../models/transactions');
+const User = require('../models/users');
+const { authenticateToken } = require('../middleware/auth'); // Import the auth function
 require('dotenv').config();
 
 // MongoDB connection
 const MONGODB_URI = process.env.MONGO_URI;
 const DB_NAME = process.env.DB_NAME;
+
+// Handle preflight requests for all routes
+router.options('*', (req, res) => {
+  res.header('Access-Control-Allow-Origin', 'http://localhost:5173');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.sendStatus(200);
+});
+
+// POST /api/mpesa/register-urls - Register callback URLs with Safaricom
+router.post('/register-urls', async (req, res) => {
+    try {
+        console.log('Registering callback URLs with Safaricom...');
+        
+        const result = await mpesaService.registerUrls();
+        
+        console.log('URL registration response:', result);
+        
+        res.json({
+            success: true,
+            message: 'Callback URLs registered successfully',
+            data: result
+        });
+        
+    } catch (error) {
+        console.error('Error registering URLs:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to register callback URLs',
+            details: error.message
+        });
+    }
+});
+
+// POST /api/mpesa/test-stkpush - Test STK Push functionality
+router.post('/test-stkpush', async (req, res) => {
+    try {
+        const { phoneNumber, amount } = req.body;
+        
+        if (!phoneNumber || !amount) {
+            return res.status(400).json({
+                success: false,
+                error: 'Phone number and amount are required'
+            });
+        }
+        
+        console.log(`Initiating STK Push: ${phoneNumber}, Amount: ${amount}`);
+        
+        const result = await mpesaService.initiateSTKPush(phoneNumber, amount);
+        
+        console.log('STK Push response:', result);
+        
+        res.json({
+            success: true,
+            message: 'STK Push initiated successfully',
+            data: result
+        });
+        
+    } catch (error) {
+        console.error('Error initiating STK Push:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to initiate STK Push',
+            details: error.message
+        });
+    }
+});
 
 // STK Push Callback endpoint (existing)
 router.post('/stkpush/callback', async (req, res) => {
@@ -101,8 +169,129 @@ router.post('/stkpush/callback', async (req, res) => {
   }
 });
 
+// POST /api/mpesa/callback - Handle M-Pesa callbacks (new generic callback)
+router.post('/callback', express.raw({ type: 'application/json' }), async (req, res) => {
+    try {
+        const callbackData = JSON.parse(req.body.toString());
+        
+        // Process the callback
+        const processedTransaction = mpesaService.processTransactionCallback(callbackData);
+        
+        if (processedTransaction.status === 'completed') {
+            // Find user by phone number
+            const user = await User.findOne({ mpesaNumber: processedTransaction.phoneNumber });
+            
+            if (user) {
+                // Save transaction to database
+                const transaction = new Transaction({
+                    ...processedTransaction,
+                    userId: user._id
+                });
+                
+                await transaction.save();
+                console.log('Transaction saved from callback:', transaction._id);
+            }
+        }
+
+        res.json({ ResultCode: 0, ResultDesc: "Success" });
+    } catch (error) {
+        console.error('Error processing callback:', error);
+        res.json({ ResultCode: 1, ResultDesc: "Failed" });
+    }
+});
+
+// POST /api/mpesa/confirmation - C2B Confirmation callback
+router.post('/confirmation', (req, res) => {
+    try {
+        console.log('C2B Confirmation received:', JSON.stringify(req.body, null, 2));
+        
+        // Process the confirmation data
+        const confirmationData = req.body;
+        
+        // Always respond with success for confirmation
+        res.json({
+            ResultCode: 0,
+            ResultDesc: "Confirmation received successfully"
+        });
+        
+    } catch (error) {
+        console.error('Error processing confirmation:', error);
+        res.json({
+            ResultCode: 1,
+            ResultDesc: "Failed to process confirmation"
+        });
+    }
+});
+
+// POST /api/mpesa/validation - C2B Validation callback
+router.post('/validation', (req, res) => {
+    try {
+        console.log('C2B Validation received:', JSON.stringify(req.body, null, 2));
+        
+        const validationData = req.body;
+        
+        // Add your validation logic here
+        // For now, we'll accept all transactions
+        
+        res.json({
+            ResultCode: 0,
+            ResultDesc: "Validation passed"
+        });
+        
+    } catch (error) {
+        console.error('Error processing validation:', error);
+        res.json({
+            ResultCode: 1,
+            ResultDesc: "Validation failed"
+        });
+    }
+});
+
+// POST /api/mpesa/timeout - Handle timeout callbacks
+router.post('/timeout', (req, res) => {
+    try {
+        console.log('Timeout callback received:', JSON.stringify(req.body, null, 2));
+        
+        res.json({
+            ResultCode: 0,
+            ResultDesc: "Timeout handled"
+        });
+        
+    } catch (error) {
+        console.error('Error handling timeout:', error);
+        res.json({
+            ResultCode: 1,
+            ResultDesc: "Failed to handle timeout"
+        });
+    }
+});
+
+// POST /api/mpesa/result - Handle result callbacks
+router.post('/result', (req, res) => {
+    try {
+        console.log('Result callback received:', JSON.stringify(req.body, null, 2));
+        
+        const resultData = req.body;
+        
+        // Process the result data here
+        // You can save transaction results to database
+        
+        res.json({
+            ResultCode: 0,
+            ResultDesc: "Result processed successfully"
+        });
+        
+    } catch (error) {
+        console.error('Error processing result:', error);
+        res.json({
+            ResultCode: 1,
+            ResultDesc: "Failed to process result"
+        });
+    }
+});
+
 // GET /api/mpesa/transactions - Get user's transaction history
-router.get('/transactions', auth, async (req, res) => {
+router.get('/transactions', authenticateToken, async (req, res) => {
     try {
         const userId = req.user.id;
         const user = await User.findById(userId);
@@ -167,7 +356,7 @@ router.get('/transactions', auth, async (req, res) => {
 });
 
 // POST /api/mpesa/sync - Manually sync transactions from M-Pesa
-router.post('/sync', auth, async (req, res) => {
+router.post('/sync', authenticateToken, async (req, res) => {
     try {
         const userId = req.user.id;
         const user = await User.findById(userId);
@@ -209,37 +398,6 @@ router.post('/sync', auth, async (req, res) => {
             error: 'Failed to sync transactions',
             details: error.message 
         });
-    }
-});
-
-// POST /api/mpesa/callback - Handle M-Pesa callbacks (new generic callback)
-router.post('/callback', express.raw({ type: 'application/json' }), async (req, res) => {
-    try {
-        const callbackData = JSON.parse(req.body.toString());
-        
-        // Process the callback
-        const processedTransaction = mpesaService.processTransactionCallback(callbackData);
-        
-        if (processedTransaction.status === 'completed') {
-            // Find user by phone number
-            const user = await User.findOne({ mpesaNumber: processedTransaction.phoneNumber });
-            
-            if (user) {
-                // Save transaction to database
-                const transaction = new Transaction({
-                    ...processedTransaction,
-                    userId: user._id
-                });
-                
-                await transaction.save();
-                console.log('Transaction saved from callback:', transaction._id);
-            }
-        }
-
-        res.json({ ResultCode: 0, ResultDesc: "Success" });
-    } catch (error) {
-        console.error('Error processing callback:', error);
-        res.json({ ResultCode: 1, ResultDesc: "Failed" });
     }
 });
 
@@ -318,5 +476,89 @@ async function saveTransactionToMongoDB(transactionData) {
     }
   }
 }
+
+// POST /api/mpesa/simple-callback - Simple callback handler for frontend display
+router.post('/simple-callback', async (req, res) => {
+  try {
+    console.log('Simple M-PESA Callback received:', JSON.stringify(req.body, null, 2));
+    
+    const callbackData = req.body;
+    const result = callbackData.Body.stkCallback;
+    
+    if (result.ResultCode === 0) {
+      // Success - extract transaction data
+      const metadata = result.CallbackMetadata.Item;
+      
+      const amount = metadata.find(item => item.Name === "Amount")?.Value;
+      const mpesaReceiptNumber = metadata.find(item => item.Name === "MpesaReceiptNumber")?.Value;
+      const transactionDate = metadata.find(item => item.Name === "TransactionDate")?.Value;
+      const phoneNumber = metadata.find(item => item.Name === "PhoneNumber")?.Value;
+      
+      // Create transaction record using our new Transaction model
+      const transaction = new Transaction({
+        mpesaReceiptNumber,
+        phoneNumber,
+        amount,
+        transactionDate,
+        status: 'completed',
+        ResultCode: result.ResultCode,
+        ResultDesc: result.ResultDesc,
+        callbackData: callbackData // Store full callback for debugging
+      });
+      
+      await transaction.save();
+      console.log('Transaction saved to Transaction model:', transaction._id);
+      
+    } else {
+      // Failed transaction
+      console.log('Transaction failed:', result.ResultDesc);
+    }
+    
+    // Always respond with 200 to acknowledge receipt
+    res.status(200).json({ 
+      ResultCode: 0, 
+      ResultDesc: "Success" 
+    });
+    
+  } catch (error) {
+    console.error('Error processing simple M-PESA callback:', error);
+    // Still respond with 200 to avoid M-PESA retries
+    res.status(200).json({ 
+      ResultCode: 0, 
+      ResultDesc: "Success" 
+    });
+  }
+});
+
+// POST /api/mpesa/create-test-transaction - Create test transaction for development
+router.post('/create-test-transaction', async (req, res) => {
+  try {
+    const testTransaction = new Transaction({
+      mpesaReceiptNumber: `TEST_${Date.now()}`,
+      phoneNumber: '254712345678',
+      amount: Math.floor(Math.random() * 1000) + 100,
+      transactionDate: new Date().toISOString().replace(/[-:]/g, '').slice(0, 14),
+      status: 'completed',
+      ResultCode: 0,
+      ResultDesc: 'Test transaction',
+      firstName: 'Test',
+      lastName: 'User'
+    });
+    
+    await testTransaction.save();
+    res.json({ 
+      success: true,
+      message: 'Test transaction created', 
+      transaction: testTransaction 
+    });
+    
+  } catch (error) {
+    console.error('Error creating test transaction:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to create test transaction' 
+    });
+  }
+});
 
 module.exports = router;
