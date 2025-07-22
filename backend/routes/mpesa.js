@@ -4,7 +4,7 @@ const { MongoClient } = require('mongodb');
 const mpesaService = require('../services/mpesaService');
 const Transaction = require('../models/transactions');
 const User = require('../models/users');
-const { authenticateToken } = require('../middleware/auth'); // Import the auth function
+const { authenticateToken } = require('../middleware/mdw'); // Import the auth function
 require('dotenv').config();
 
 // MongoDB connection

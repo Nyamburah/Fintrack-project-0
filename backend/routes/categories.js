@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const Category = require('../models/categories');
-const { authenticateToken } = require('../middleware/auth');
+const { authenticateToken } = require('../middleware/mdw');
 
 // Apply authentication middleware to all category routes
 router.use(authenticateToken);

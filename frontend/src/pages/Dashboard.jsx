@@ -1,10 +1,12 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
-import { useData } from '../contexts/DataContext';
-import { 
-  Wallet, 
-  Target, 
+import { useAuth } from '../hooks/useAuth';
+
+import { useData } from '../hooks/useData';
+
+import {
+  Wallet,
+  Target,
   Calendar,
   Flame,
   Coins,
@@ -18,32 +20,24 @@ import {
   Plus
 } from 'lucide-react';
 
-/**
- * Dashboard Component
- * 
- * This is the main dashboard that users see after logging in.
- * It provides an overview of their financial status, streak information,
- * and quick access to key features.
- * 
- * Features:
- * - User stats overview (streak, coins, points)
- * - Financial summary (spending, budget status)
- * - Recent transactions
- * - Quick action buttons at the top
- * - Streak status and motivation
- */
 const Dashboard = () => {
   const { user, updateUserStats } = useAuth();
-  const { transactions, categories, getLabeledTransactionsToday, getUnlabeledTransactions } = useData();
+  const {
+    transactions,
+    categories,
+    getLabeledTransactionsToday,
+    getUnlabeledTransactions
+  } = useData();
 
-  // Calculate financial summaries
   const thisMonthSpending = transactions
     .filter(t => {
       const transactionDate = new Date(t.date);
       const now = new Date();
-      return transactionDate.getMonth() === now.getMonth() && 
-             transactionDate.getFullYear() === now.getFullYear() &&
-             t.type === 'expense';
+      return (
+        transactionDate.getMonth() === now.getMonth() &&
+        transactionDate.getFullYear() === now.getFullYear() &&
+        t.type === 'expense'
+      );
     })
     .reduce((sum, t) => sum + t.amount, 0);
 
@@ -51,19 +45,16 @@ const Dashboard = () => {
   const totalSpent = categories.reduce((sum, c) => sum + c.spent, 0);
   const budgetUsed = totalBudget > 0 ? (totalSpent / totalBudget) * 100 : 0;
 
-  const labeledToday = getLabeledTransactionsToday();
-  const unlabeledCount = getUnlabeledTransactions().length;
+  const labeledToday = getLabeledTransactionsToday?.() || 0;
+  const unlabeledCount = getUnlabeledTransactions?.().length || 0;
 
-  // Recent transactions (last 5)
   const recentTransactions = transactions.slice(0, 5);
 
-  // Quick action items
   const quickActions = [
     {
       to: '/transactions',
       icon: CreditCard,
       label: 'Label Transactions',
-      color: 'blue',
       bgColor: 'bg-blue-50',
       hoverColor: 'hover:bg-blue-100',
       textColor: 'text-blue-700',
@@ -73,7 +64,6 @@ const Dashboard = () => {
       to: '/categories',
       icon: Tag,
       label: 'Manage Categories',
-      color: 'purple',
       bgColor: 'bg-purple-50',
       hoverColor: 'hover:bg-purple-100',
       textColor: 'text-purple-700',
@@ -83,7 +73,6 @@ const Dashboard = () => {
       to: '/budgets',
       icon: Target,
       label: 'Set Budgets',
-      color: 'emerald',
       bgColor: 'bg-emerald-50',
       hoverColor: 'hover:bg-emerald-100',
       textColor: 'text-emerald-700',
@@ -93,7 +82,6 @@ const Dashboard = () => {
       to: '/reports',
       icon: BarChart3,
       label: 'View Reports',
-      color: 'orange',
       bgColor: 'bg-orange-50',
       hoverColor: 'hover:bg-orange-100',
       textColor: 'text-orange-700',
@@ -101,19 +89,11 @@ const Dashboard = () => {
     }
   ];
 
-  /**
-   * Handle Streak Update
-   * 
-   * DATABASE INTEGRATION POINT:
-   * This should update the user's streak, coins, and points in the database
-   * Call this when user completes daily labeling task
-   */
   const handleStreakUpdate = () => {
     if (user) {
-      const newStreak = user.streak + 1;
-      const newCoins = user.coins + 1;
-      const newPoints = user.points + (newStreak % 7 === 0 ? 50 : 10);
-      
+      const newStreak = (user.streak || 0) + 1;
+      const newCoins = (user.coins || 0) + 1;
+      const newPoints = (user.points || 0) + (newStreak % 7 === 0 ? 50 : 10);
       updateUserStats(newStreak, newCoins, newPoints);
     }
   };
@@ -121,26 +101,22 @@ const Dashboard = () => {
   return (
     <div className="min-h-screen bg-gray-50 pt-6">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Welcome Header */}
         <div className="mb-6">
           <h1 className="text-3xl font-bold text-gray-900">
             Welcome back, {user?.name}! 👋
           </h1>
-          <p className="text-gray-600 mt-2">
-            Here's your financial overview for today
-          </p>
+          <p className="text-gray-600 mt-2">Here's your financial overview for today</p>
         </div>
 
-        {/* Quick Actions Bar */}
+        {/* Quick Actions */}
         <div className="bg-white rounded-xl shadow-sm p-6 mb-8">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-gray-900">Quick Actions</h2>
             <Plus className="h-5 w-5 text-gray-400" />
           </div>
-          
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {quickActions.map((action) => {
-              const IconComponent = action.icon;
+            {quickActions.map(action => {
+              const Icon = action.icon;
               return (
                 <Link
                   key={action.to}
@@ -149,7 +125,7 @@ const Dashboard = () => {
                 >
                   <div className="text-center">
                     <div className={`${action.iconBg} w-12 h-12 rounded-lg flex items-center justify-center mx-auto mb-3`}>
-                      <IconComponent className={`h-6 w-6 ${action.textColor}`} />
+                      <Icon className={`h-6 w-6 ${action.textColor}`} />
                     </div>
                     <p className="text-sm font-medium">{action.label}</p>
                   </div>
@@ -158,7 +134,6 @@ const Dashboard = () => {
             })}
           </div>
 
-          {/* Action indicator if there are unlabeled transactions */}
           {unlabeledCount > 0 && (
             <div className="mt-4 bg-yellow-50 border border-yellow-200 rounded-lg p-3">
               <div className="flex items-center justify-between">
@@ -168,10 +143,7 @@ const Dashboard = () => {
                     {unlabeledCount} transactions need labeling
                   </span>
                 </div>
-                <Link
-                  to="/transactions"
-                  className="text-sm font-medium text-yellow-700 hover:text-yellow-800 underline"
-                >
+                <Link to="/transactions" className="text-sm font-medium text-yellow-700 hover:text-yellow-800 underline">
                   Label Now
                 </Link>
               </div>
@@ -179,102 +151,40 @@ const Dashboard = () => {
           )}
         </div>
 
-        {/* Stats Grid */}
+        {/* Stats Section */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          {/* Streak Card */}
-          <div className="bg-gradient-to-br from-orange-500 to-red-500 p-6 rounded-xl text-white">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-orange-100 text-sm font-medium">Current Streak</p>
-                <p className="text-3xl font-bold">{user?.streak || 0}</p>
-                <p className="text-orange-100 text-xs">days</p>
-              </div>
-              <div className="bg-white bg-opacity-20 p-3 rounded-lg">
-                <Flame className="h-8 w-8" />
-              </div>
-            </div>
-          </div>
-
-          {/* Coins Card */}
-          <div className="bg-gradient-to-br from-yellow-500 to-orange-500 p-6 rounded-xl text-white">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-yellow-100 text-sm font-medium">Coins Earned</p>
-                <p className="text-3xl font-bold">{user?.coins || 0}</p>
-                <p className="text-yellow-100 text-xs">total</p>
-              </div>
-              <div className="bg-white bg-opacity-20 p-3 rounded-lg">
-                <Coins className="h-8 w-8" />
-              </div>
-            </div>
-          </div>
-
-          {/* Points Card */}
-          <div className="bg-gradient-to-br from-purple-500 to-pink-500 p-6 rounded-xl text-white">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-purple-100 text-sm font-medium">Total Points</p>
-                <p className="text-3xl font-bold">{user?.points || 0}</p>
-                <p className="text-purple-100 text-xs">lifetime</p>
-              </div>
-              <div className="bg-white bg-opacity-20 p-3 rounded-lg">
-                <Trophy className="h-8 w-8" />
-              </div>
-            </div>
-          </div>
-
-          {/* Budget Status Card */}
-          <div className="bg-gradient-to-br from-emerald-500 to-teal-500 p-6 rounded-xl text-white">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-emerald-100 text-sm font-medium">Budget Used</p>
-                <p className="text-3xl font-bold">{budgetUsed.toFixed(0)}%</p>
-                <p className="text-emerald-100 text-xs">this month</p>
-              </div>
-              <div className="bg-white bg-opacity-20 p-3 rounded-lg">
-                <Target className="h-8 w-8" />
-              </div>
-            </div>
-          </div>
+          <StatCard title="Current Streak" value={user?.streak || 0} subtitle="days" icon={Flame} bg="from-orange-500 to-red-500" />
+          <StatCard title="Coins Earned" value={user?.coins || 0} subtitle="total" icon={Coins} bg="from-yellow-500 to-orange-500" />
+          <StatCard title="Total Points" value={user?.points || 0} subtitle="lifetime" icon={Trophy} bg="from-purple-500 to-pink-500" />
+          <StatCard title="Budget Used" value={`${budgetUsed.toFixed(0)}%`} subtitle="this month" icon={Target} bg="from-emerald-500 to-teal-500" />
         </div>
 
-        {/* Main Content Grid */}
+        {/* Content Section */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Financial Summary */}
+          {/* Left column */}
           <div className="lg:col-span-2 space-y-6">
             {/* Monthly Overview */}
             <div className="bg-white rounded-xl shadow-sm p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-semibold text-gray-900">Monthly Overview</h2>
-                <Calendar className="h-5 w-5 text-gray-400" />
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="text-center p-4 bg-gray-50 rounded-lg">
-                  <p className="text-sm text-gray-600">Total Spending</p>
-                  <p className="text-2xl font-bold text-gray-900">₹{thisMonthSpending.toLocaleString()}</p>
-                </div>
-                <div className="text-center p-4 bg-gray-50 rounded-lg">
-                  <p className="text-sm text-gray-600">Budget Remaining</p>
-                  <p className="text-2xl font-bold text-emerald-600">₹{(totalBudget - totalSpent).toLocaleString()}</p>
-                </div>
-                <div className="text-center p-4 bg-gray-50 rounded-lg">
-                  <p className="text-sm text-gray-600">Transactions</p>
-                  <p className="text-2xl font-bold text-blue-600">{transactions.length}</p>
-                </div>
+              <SectionHeader title="Monthly Overview" icon={<Calendar className="h-5 w-5 text-gray-400" />} />
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                <OverviewItem label="Total Spending" value={`KSh ${thisMonthSpending.toLocaleString()}`} />
+                <OverviewItem label="Budget Remaining" value={`KSh ${(totalBudget - totalSpent).toLocaleString()}`} color="text-emerald-600" />
+                <OverviewItem label="Transactions" value={transactions.length} color="text-blue-600" />
               </div>
 
-              {/* Budget Progress */}
               <div className="mt-6">
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-sm text-gray-600">Budget Progress</span>
-                  <span className="text-sm font-medium">{budgetUsed.toFixed(1)}%</span>
+                <div className="flex justify-between items-center mb-2 text-sm text-gray-600">
+                  <span>Budget Progress</span>
+                  <span className="font-medium">{budgetUsed.toFixed(1)}%</span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-3">
-                  <div 
-                    className={`h-3 rounded-full transition-all duration-500 ${
-                      budgetUsed > 90 ? 'bg-red-500' : 
-                      budgetUsed > 75 ? 'bg-yellow-500' : 'bg-emerald-500'
+                  <div
+                    className={`h-3 rounded-full ${
+                      budgetUsed > 90
+                        ? 'bg-red-500'
+                        : budgetUsed > 75
+                        ? 'bg-yellow-500'
+                        : 'bg-emerald-500'
                     }`}
                     style={{ width: `${Math.min(budgetUsed, 100)}%` }}
                   ></div>
@@ -284,41 +194,11 @@ const Dashboard = () => {
 
             {/* Recent Transactions */}
             <div className="bg-white rounded-xl shadow-sm p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-semibold text-gray-900">Recent Transactions</h2>
-                <Wallet className="h-5 w-5 text-gray-400" />
-              </div>
-
-              <div className="space-y-3">
+              <SectionHeader title="Recent Transactions" icon={<Wallet className="h-5 w-5 text-gray-400" />} />
+              <div className="space-y-3 mt-4">
                 {recentTransactions.length > 0 ? (
-                  recentTransactions.map((transaction) => (
-                    <div key={transaction.id} className="flex items-center justify-between p-3 border border-gray-100 rounded-lg hover:bg-gray-50 transition-colors duration-200">
-                      <div className="flex items-center space-x-3">
-                        <div className={`p-2 rounded-lg ${
-                          transaction.type === 'expense' ? 'bg-red-100' : 'bg-emerald-100'
-                        }`}>
-                          {transaction.type === 'expense' ? (
-                            <ArrowDown className="h-4 w-4 text-red-600" />
-                          ) : (
-                            <ArrowUp className="h-4 w-4 text-emerald-600" />
-                          )}
-                        </div>
-                        <div>
-                          <p className="font-medium text-gray-900">{transaction.description}</p>
-                          <p className="text-sm text-gray-500">{transaction.mpesaCode}</p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className={`font-semibold ${
-                          transaction.type === 'expense' ? 'text-red-600' : 'text-emerald-600'
-                        }`}>
-                          {transaction.type === 'expense' ? '-' : '+'}₹{transaction.amount.toLocaleString()}
-                        </p>
-                        <p className="text-sm text-gray-500">
-                          {new Date(transaction.date).toLocaleDateString()}
-                        </p>
-                      </div>
-                    </div>
+                  recentTransactions.map(transaction => (
+                    <TransactionItem key={transaction.id} transaction={transaction} />
                   ))
                 ) : (
                   <div className="text-center py-8 text-gray-500">
@@ -330,28 +210,24 @@ const Dashboard = () => {
             </div>
           </div>
 
-          {/* Sidebar */}
+          {/* Right column */}
           <div className="space-y-6">
             {/* Daily Progress */}
             <div className="bg-white rounded-xl shadow-sm p-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Today's Progress</h3>
-              
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Labeled Transactions</span>
-                  <span className="font-semibold text-emerald-600">{labeledToday}</span>
-                </div>
-
-                <button
-                  onClick={handleStreakUpdate}
-                  className="w-full bg-emerald-600 text-white py-2 px-4 rounded-lg hover:bg-emerald-700 transition-colors duration-200 text-sm font-medium"
-                >
-                  Complete Daily Goal
-                </button>
+              <div className="flex justify-between items-center mb-4">
+                <span className="text-sm text-gray-600">Labeled Transactions</span>
+                <span className="font-semibold text-emerald-600">{labeledToday}</span>
               </div>
+              <button
+                onClick={handleStreakUpdate}
+                className="w-full bg-emerald-600 text-white py-2 px-4 rounded-lg hover:bg-emerald-700 transition text-sm font-medium"
+              >
+                Complete Daily Goal
+              </button>
             </div>
 
-            {/* Streak Status */}
+            {/* Streak Info */}
             <div className="bg-gradient-to-br from-orange-100 to-red-100 rounded-xl p-6">
               <div className="text-center">
                 <div className="bg-orange-500 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -361,28 +237,24 @@ const Dashboard = () => {
                   {user?.streak || 0} Day Streak!
                 </h3>
                 <p className="text-sm text-gray-600 mb-4">
-                  {user?.streak === 0 
-                    ? "Start your journey today!" 
-                    : user?.streak && user.streak < 7 
+                  {user?.streak === 0
+                    ? 'Start your journey today!'
+                    : user?.streak < 7
                     ? `${7 - user.streak} days to unlock weekly bonus!`
-                    : "Amazing! Keep the momentum going!"
-                  }
+                    : 'Amazing! Keep the momentum going!'}
                 </p>
-                
-                {/* Streak Progress */}
                 <div className="mb-4">
                   <div className="flex justify-between text-xs text-gray-600 mb-1">
                     <span>Week Progress</span>
-                    <span>{((user?.streak || 0) % 7)}/7</span>
+                    <span>{(user?.streak || 0) % 7}/7</span>
                   </div>
                   <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div 
+                    <div
                       className="bg-orange-500 h-2 rounded-full transition-all duration-500"
                       style={{ width: `${(((user?.streak || 0) % 7) / 7) * 100}%` }}
                     ></div>
                   </div>
                 </div>
-
                 <p className="text-xs text-gray-500">
                   Complete daily tasks to maintain your streak and earn rewards!
                 </p>
@@ -394,5 +266,62 @@ const Dashboard = () => {
     </div>
   );
 };
+
+// --- Reusable UI Components ---
+// eslint-disable-next-line no-unused-vars
+const StatCard = ({ title, value, subtitle, bg, icon: Icon }) => (
+  <div className={`bg-gradient-to-br ${bg} p-6 rounded-xl text-white`}>
+    <div className="flex items-center justify-between">
+      <div>
+        <p className="text-white/80 text-sm font-medium">{title}</p>
+        <p className="text-3xl font-bold">{value}</p>
+        <p className="text-white/70 text-xs">{subtitle}</p>
+      </div>
+      <div className="bg-white bg-opacity-20 p-3 rounded-lg">
+        <Icon className="h-8 w-8" />
+      </div>
+    </div>
+  </div>
+);
+
+const SectionHeader = ({ title, icon }) => (
+  <div className="flex items-center justify-between">
+    <h2 className="text-xl font-semibold text-gray-900">{title}</h2>
+    {icon}
+  </div>
+);
+
+const OverviewItem = ({ label, value, color = 'text-gray-900' }) => (
+  <div className="text-center p-4 bg-gray-50 rounded-lg">
+    <p className="text-sm text-gray-600">{label}</p>
+    <p className={`text-2xl font-bold ${color}`}>{value}</p>
+  </div>
+);
+
+const TransactionItem = ({ transaction }) => (
+  <div className="flex items-center justify-between p-3 border border-gray-100 rounded-lg hover:bg-gray-50 transition-colors duration-200">
+    <div className="flex items-center space-x-3">
+      <div className={`p-2 rounded-lg ${transaction.type === 'expense' ? 'bg-red-100' : 'bg-emerald-100'}`}>
+        {transaction.type === 'expense' ? (
+          <ArrowDown className="h-4 w-4 text-red-600" />
+        ) : (
+          <ArrowUp className="h-4 w-4 text-emerald-600" />
+        )}
+      </div>
+      <div>
+        <p className="font-medium text-gray-900">{transaction.description}</p>
+        <p className="text-sm text-gray-500">{transaction.mpesaCode}</p>
+      </div>
+    </div>
+    <div className="text-right">
+      <p className={`font-semibold ${transaction.type === 'expense' ? 'text-red-600' : 'text-emerald-600'}`}>
+        {transaction.type === 'expense' ? '-' : '+'}KSh{transaction.amount.toLocaleString()}
+      </p>
+      <p className="text-sm text-gray-500">
+        {new Date(transaction.date).toLocaleDateString()}
+      </p>
+    </div>
+  </div>
+);
 
 export default Dashboard;

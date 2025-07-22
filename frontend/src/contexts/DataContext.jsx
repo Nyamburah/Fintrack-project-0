@@ -1,509 +1,72 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useState, useEffect, useCallback } from 'react';
+import TransactionAPI from '../services/transactionService';
 
-/**
- * Transaction structure:
- * {
- *   id: string;
- *   amount: number;
- *   type: 'expense' | 'income';
- *   description: string;
- *   date: string;
- *   mpesaCode: string;
- *   category?: string;
- *   isLabeled: boolean;
- *   status?: string;
- * }
- *
- * Category structure:
- * {
- *   id: string;
- *   name: string;
- *   color: string;
- *   budget: number;
- *   spent: number;
- * }
- */
+export const DataContext = createContext(undefined);
 
-// Transaction API Service
-class TransactionAPI {
-  constructor() {
-    // Use import.meta.env for Vite or check if process exists
-    // eslint-disable-next-line no-undef
-    const apiUrl = typeof process !== 'undefined' && process.env 
-      // eslint-disable-next-line no-undef
-      ? process.env.REACT_APP_API_URL 
-      : import.meta.env?.VITE_API_URL || 'http://localhost:8000/api';
-    
-    this.baseURL = apiUrl;
-  }
-
-  // Get auth token from localStorage
-  getAuthToken() {
-    return localStorage.getItem('authToken');
-  }
-
-  // Get auth headers
-  getAuthHeaders() {
-    const token = this.getAuthToken();
-    return {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`
-    };
-  }
-
-  // Fetch user transactions
-  async fetchTransactions(filters = {}) {
-    try {
-      const queryParams = new URLSearchParams();
-      
-      Object.keys(filters).forEach(key => {
-        if (filters[key]) {
-          queryParams.append(key, filters[key]);
-        }
-      });
-
-      const response = await fetch(`${this.baseURL}/mpesa/transactions?${queryParams}`, {
-        headers: this.getAuthHeaders()
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      return data;
-    } catch (error) {
-      console.error('Error fetching transactions:', error);
-      throw error;
-    }
-  }
-
-  // Sync transactions from M-Pesa
-  async syncTransactions() {
-    try {
-      const response = await fetch(`${this.baseURL}/mpesa/sync`, {
-        method: 'POST',
-        headers: this.getAuthHeaders()
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      return data;
-    } catch (error) {
-      console.error('Error syncing transactions:', error);
-      throw error;
-    }
-  }
-
-  // Update transaction category
-  async updateTransactionCategory(transactionId, categoryId) {
-    try {
-      const response = await fetch(`${this.baseURL}/transactions/${transactionId}/category`, {
-        method: 'PUT',
-        headers: this.getAuthHeaders(),
-        body: JSON.stringify({ categoryId })
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      return data;
-    } catch (error) {
-      console.error('Error updating transaction category:', error);
-      throw error;
-    }
-  }
-}
-
-// Create transaction API instance
-const transactionAPI = new TransactionAPI();
-
-// Create a context with undefined initial value
-const DataContext = createContext(undefined);
-
-/**
- * DataProvider component
- * - Holds application state: transactions and categories
- * - Provides functions to manipulate this state
- * - Integrates with M-Pesa API for real transaction data
- */
 export const DataProvider = ({ children }) => {
-  // State management
   const [transactions, setTransactions] = useState([]);
-  const [categories, setCategories] = useState([
-    { id: 'food', name: 'Food & Dining', color: '#EF4444', budget: 5000, spent: 0 },
-    { id: 'transport', name: 'Transport', color: '#3B82F6', budget: 3000, spent: 0 },
-    { id: 'entertainment', name: 'Entertainment', color: '#8B5CF6', budget: 2000, spent: 0 },
-    { id: 'utilities', name: 'Utilities', color: '#F59E0B', budget: 4000, spent: 0 },
-    { id: 'shopping', name: 'Shopping', color: '#10B981', budget: 2500, spent: 0 },
-    { id: 'healthcare', name: 'Healthcare', color: '#EC4899', budget: 1500, spent: 0 },
-    { id: 'education', name: 'Education', color: '#6366F1', budget: 2000, spent: 0 },
-    { id: 'income', name: 'Income', color: '#059669', budget: 0, spent: 0 },
-    { id: 'other', name: 'Other', color: '#6B7280', budget: 1000, spent: 0 }
-  ]);
+  const [categories] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [error] = useState(null);
 
-  /**
-   * Get mock transactions for development/fallback
-   */
-  const getMockTransactions = useCallback(() => {
-    return [
-      {
-        id: '1',
-        amount: 500,
-        type: 'expense',
-        description: 'Sent to Jane Doe',
-        date: new Date().toISOString(),
-        mpesaCode: 'QBK2H5I9OP',
-        category: 'food',
-        isLabeled: true,
-        status: 'completed'
-      },
-      {
-        id: '2',
-        amount: 1200,
-        type: 'expense',
-        description: 'Paid for groceries',
-        date: new Date(Date.now() - 86400000).toISOString(), // Yesterday
-        mpesaCode: 'QBK2H5I9OQ',
-        category: 'food',
-        isLabeled: true,
-        status: 'completed'
-      },
-      {
-        id: '3',
-        amount: 300,
-        type: 'expense',
-        description: 'Bus fare',
-        date: new Date(Date.now() - 172800000).toISOString(), // 2 days ago
-        mpesaCode: 'QBK2H5I9OR',
-        category: 'transport',
-        isLabeled: true,
-        status: 'completed'
-      },
-      {
-        id: '4',
-        amount: 2000,
-        type: 'income',
-        description: 'Salary deposit',
-        date: new Date(Date.now() - 259200000).toISOString(), // 3 days ago
-        mpesaCode: 'QBK2H5I9OS',
-        category: 'income',
-        isLabeled: true,
-        status: 'completed'
-      },
-      {
-        id: '5',
-        amount: 800,
-        type: 'expense',
-        description: 'Electricity bill',
-        date: new Date(Date.now() - 345600000).toISOString(), // 4 days ago
-        mpesaCode: 'QBK2H5I9OT',
-        isLabeled: false,
-        status: 'completed'
-      }
-    ];
-  }, []);
+  const getMockTransactions = useCallback(() => [
+    {
+      id: '1',
+      amount: 500,
+      type: 'expense',
+      description: 'Sent to Jane Doe',
+      date: new Date().toISOString(),
+      mpesaCode: 'CODE1',
+      category: 'food',
+      isLabeled: true,
+      status: 'completed'
+    }
+  ], []);
 
-  /**
-   * Fetch transactions from M-Pesa API
-   * Falls back to mock data if API is unavailable
-   */
-  const fetchTransactions = useCallback(async (filters = {}) => {
+  const fetchTransactions = useCallback(async () => {
     setLoading(true);
-    setError(null);
-    
     try {
-      // Check if user is authenticated
-      const authToken = transactionAPI.getAuthToken();
-      
+      const authToken = TransactionAPI.getAuthToken();
       if (!authToken) {
-        // Use mock data if not authenticated
         setTransactions(getMockTransactions());
         return;
       }
 
-      const response = await transactionAPI.fetchTransactions(filters);
-      
+      const response = await TransactionAPI.fetchTransactions();
       if (response.success) {
         setTransactions(response.transactions);
       } else {
-        throw new Error('Failed to fetch transactions');
+        throw new Error('Failed to fetch');
       }
-    } catch (error) {
-      console.warn('API unavailable, using mock data:', error.message);
-      // Fall back to mock data
+    } catch (err) {
+      console.warn('API unavailable, using mock:', err.message);
       setTransactions(getMockTransactions());
-      setError(null); // Don't show error for fallback
     } finally {
       setLoading(false);
     }
   }, [getMockTransactions]);
 
-  /**
-   * Updates category "spent" totals based on current transactions
-   */
-  const updateCategorySpending = useCallback(() => {
-    setCategories(prev => prev.map(category => {
-      const spent = transactions
-        .filter(t => t.category === category.id && t.type === 'expense')
-        .reduce((sum, t) => sum + t.amount, 0);
-      return { ...category, spent };
-    }));
-  }, [transactions]);
-
-  // Fetch transactions on component mount
   useEffect(() => {
     fetchTransactions();
   }, [fetchTransactions]);
 
-  // Update category spending when transactions change
-  useEffect(() => {
-    updateCategorySpending();
-  }, [updateCategorySpending]);
-
-  /**
-   * Sync transactions from M-Pesa
-   */
-  const syncTransactions = async () => {
-    setLoading(true);
-    setError(null);
-    
-    try {
-      const authToken = transactionAPI.getAuthToken();
-      
-      if (!authToken) {
-        throw new Error('Authentication required for sync');
-      }
-
-      const response = await transactionAPI.syncTransactions();
-      
-      if (response.success) {
-        // Refresh transactions after sync
-        await fetchTransactions();
-        return response;
-      } else {
-        throw new Error('Failed to sync transactions');
-      }
-    } catch (error) {
-      console.error('Error syncing transactions:', error);
-      setError(error.message || 'Failed to sync transactions');
-      throw error;
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  /**
-   * Adds a new transaction
-   */
-  const addTransaction = (transaction) => {
-    const newTransaction = {
-      ...transaction,
-      id: Date.now().toString(),
-      isLabeled: !!transaction.category,
-      status: 'completed'
-    };
-
-    setTransactions(prev => [newTransaction, ...prev]);
-  };
-
-  /**
-   * Updates an existing transaction by ID
-   * Integrates with M-Pesa API for category updates
-   */
-  const updateTransaction = async (id, updates) => {
-    try {
-      // If updating category and user is authenticated, call API
-      if (updates.category && transactionAPI.getAuthToken()) {
-        await transactionAPI.updateTransactionCategory(id, updates.category);
-      }
-      
-      // Update local state
-      const updatedTransactions = transactions.map(transaction =>
-        transaction.id === id
-          ? { ...transaction, ...updates, isLabeled: !!updates.category || transaction.isLabeled }
-          : transaction
-      );
-      setTransactions(updatedTransactions);
-    } catch (error) {
-      console.error('Error updating transaction:', error);
-      setError(error.message || 'Failed to update transaction');
-      
-      // Still update local state even if API fails
-      const updatedTransactions = transactions.map(transaction =>
-        transaction.id === id
-          ? { ...transaction, ...updates, isLabeled: !!updates.category || transaction.isLabeled }
-          : transaction
-      );
-      setTransactions(updatedTransactions);
-    }
-  };
-
-  /**
-   * Adds a new category
-   */
-  const addCategory = (category) => {
-    const newCategory = {
-      ...category,
-      id: Date.now().toString(),
-      spent: 0
-    };
-
-    setCategories(prev => [...prev, newCategory]);
-  };
-
-  /**
-   * Updates a category by ID
-   */
-  const updateCategory = (id, updates) => {
-    setCategories(prev =>
-      prev.map(category =>
-        category.id === id
-          ? { ...category, ...updates }
-          : category
-      )
-    );
-  };
-
-  /**
-   * Returns the number of labeled transactions for today
-   */
   const getLabeledTransactionsToday = () => {
     const today = new Date().toDateString();
-    return transactions.filter(t =>
-      new Date(t.date).toDateString() === today && t.isLabeled
-    ).length;
+    return transactions.filter(t => new Date(t.date).toDateString() === today && t.isLabeled).length;
   };
 
-  /**
-   * Returns all unlabeled transactions
-   */
   const getUnlabeledTransactions = () => {
     return transactions.filter(t => !t.isLabeled);
   };
 
-  /**
-   * Calculates total spending for a category over a given time period
-   * @param {string} categoryId
-   * @param {'daily'|'weekly'|'monthly'|'quarterly'|'annual'} period
-   */
-  const getCategorySpending = (categoryId, period) => {
-    const now = new Date();
-    let startDate;
-
-    switch (period) {
-      case 'daily':
-        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        break;
-      case 'weekly':
-        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-        break;
-      case 'monthly':
-        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-        break;
-      case 'quarterly':
-        { const quarter = Math.floor(now.getMonth() / 3);
-        startDate = new Date(now.getFullYear(), quarter * 3, 1);
-        break; }
-      case 'annual':
-        startDate = new Date(now.getFullYear(), 0, 1);
-        break;
-      default:
-        startDate = new Date(0); // default to all-time
-    }
-
-    return transactions
-      .filter(t =>
-        t.category === categoryId &&
-        t.type === 'expense' &&
-        new Date(t.date) >= startDate
-      )
-      .reduce((sum, t) => sum + t.amount, 0);
-  };
-
-  /**
-   * Get transactions summary
-   */
-  const getTransactionSummary = () => {
-    const summary = transactions.reduce((acc, transaction) => {
-      if (transaction.type === 'expense') {
-        acc.totalExpenses += transaction.amount;
-        acc.expenseCount += 1;
-      } else {
-        acc.totalIncome += transaction.amount;
-        acc.incomeCount += 1;
-      }
-      return acc;
-    }, {
-      totalExpenses: 0,
-      totalIncome: 0,
-      expenseCount: 0,
-      incomeCount: 0
-    });
-
-    summary.netIncome = summary.totalIncome - summary.totalExpenses;
-    summary.totalTransactions = transactions.length;
-    
-    return summary;
-  };
-
-  /**
-   * Get category breakdown
-   */
-  const getCategoryBreakdown = () => {
-    const breakdown = {};
-    
-    transactions.forEach(transaction => {
-      if (transaction.category && transaction.type === 'expense') {
-        const category = categories.find(cat => cat.id === transaction.category);
-        if (category) {
-          if (!breakdown[category.name]) {
-            breakdown[category.name] = {
-              amount: 0,
-              count: 0,
-              color: category.color
-            };
-          }
-          breakdown[category.name].amount += transaction.amount;
-          breakdown[category.name].count += 1;
-        }
-      }
-    });
-
-    return breakdown;
-  };
-
-  // Expose all values and functions to consuming components
   const value = {
-    // State
     transactions,
     categories,
     loading,
     error,
-    
-    // Transaction functions
-    addTransaction,
-    updateTransaction,
     fetchTransactions,
-    syncTransactions,
-    
-    // Category functions
-    addCategory,
-    updateCategory,
-    
-    // Utility functions
     getLabeledTransactionsToday,
-    getUnlabeledTransactions,
-    getCategorySpending,
-    getTransactionSummary,
-    getCategoryBreakdown,
+    getUnlabeledTransactions
   };
 
   return (
@@ -511,15 +74,4 @@ export const DataProvider = ({ children }) => {
       {children}
     </DataContext.Provider>
   );
-};
-
-/**
- * Custom hook to consume the DataContext safely
- */
-export const useData = () => {
-  const context = useContext(DataContext);
-  if (context === undefined) {
-    throw new Error('useData must be used within a DataProvider');
-  }
-  return context;
 };

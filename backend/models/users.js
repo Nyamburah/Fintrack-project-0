@@ -16,7 +16,8 @@ const userSchema = new Schema({
     mpesaNumber: {
         type: String,
         required: true,
-        trim: true
+        trim: true,
+        unique:true
     },
     password: {
         type: String,
