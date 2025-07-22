@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  Wallet, Eye, EyeOff, Mail, Lock, User, Phone, AlertCircle
+  Wallet, Eye, EyeOff, Mail, Lock, User, Phone, AlertCircle, CheckCircle
 } from 'lucide-react';
-import axios from 'axios';
 import { toast } from 'react-hot-toast';
+import authService from '../services/authService';
 
 const RegisterPage = () => {
   const [formData, setFormData] = useState({
@@ -109,32 +109,24 @@ const RegisterPage = () => {
     setErrors(prev => ({ ...prev, general: '' }));
 
     if (!validateForm()) {
-      console.log('Validation errors:', errors); // Debug: log errors if validation fails
       return;
     }
     
     setIsLoading(true);
 
     try {
-      console.log('Attempting to register with:', {
-        name: formData.name.trim(),
-        email: formData.email.toLowerCase(),
-        mpesaNumber: formData.mpesaNumber,
-        password: '***hidden***'
-      });
-
-      const response = await axios.post('http://localhost:8000/auth/register', {
-        name: formData.name.trim(),
-        email: formData.email.toLowerCase(),
+      // Use the auth service for registration
+      const result = await authService.register({
+        name: formData.name,
+        email: formData.email,
         mpesaNumber: formData.mpesaNumber,
         password: formData.password
       });
 
-      console.log('Registration response:', response.data);
-
-      // Check if registration was successful
-      if (response.data.success || response.data.user) {
-        toast.success("Account created successfully!");
+      if (result.success) {
+        // Registration successful
+        toast.success(result.message || "Account created successfully!");
+        
         // Clear form
         setFormData({
           name: '',
@@ -143,47 +135,52 @@ const RegisterPage = () => {
           password: '',
           confirmPassword: '',
         });
-        // Navigate to login page after successful registration
-        navigate('/login');
-      } else if (response.data.error) {
-        // Handle backend validation errors
-        setErrors({ general: response.data.error });
-        toast.error(response.data.error);
+        
+        // Navigate to login page after short delay
+        setTimeout(() => {
+          navigate('/login', { 
+            state: { 
+              message: 'Registration successful! Please log in with your credentials.' 
+            }
+          });
+        }, 1500);
       } else {
-        setErrors({ general: 'Registration failed. Please try again.' });
-        toast.error('Registration failed. Please try again.');
+        // Registration failed
+        setErrors({ general: result.error });
+        toast.error(result.error);
+        
+        // Handle specific error cases
+        if (result.status === 409) {
+          // User already exists
+          setErrors({ 
+            email: 'An account with this email already exists',
+            general: result.error 
+          });
+        }
       }
       
     } catch (error) {
-      console.error('Registration error:', error);
-
-      if (error.response) {
-        // Server responded with error status
-        console.log('Server error response:', error.response.data);
-        console.log('Status code:', error.response.status);
-        
-        if (error.response.data && error.response.data.error) {
-          setErrors({ general: error.response.data.error });
-          toast.error(error.response.data.error);
-        } else {
-          setErrors({ general: 'Server error occurred. Please try again.' });
-          toast.error('Server error occurred. Please try again.');
-        }
-      } else if (error.request) {
-        // Network error - no response received
-        console.log('Network error - no response received');
-        setErrors({ general: 'Cannot connect to server. Please check if the server is running.' });
-        toast.error('Cannot connect to server. Please check if the server is running.');
-      } else {
-        // Other error
-        console.log('Error setting up request:', error.message);
-        setErrors({ general: 'An unexpected error occurred. Please try again.' });
-        toast.error('An unexpected error occurred. Please try again.');
-      }
+      console.error('Unexpected registration error:', error);
+      const errorMessage = 'An unexpected error occurred. Please try again.';
+      setErrors({ general: errorMessage });
+      toast.error(errorMessage);
     } finally {
       setIsLoading(false);
     }
   };
+
+  // Password strength indicator
+  const getPasswordStrength = (password) => {
+    let strength = 0;
+    if (password.length >= 8) strength++;
+    if (/[A-Z]/.test(password)) strength++;
+    if (/[a-z]/.test(password)) strength++;
+    if (/\d/.test(password)) strength++;
+    if (/[!@#$%^&*(),.?":{}|<>]/.test(password)) strength++;
+    return strength;
+  };
+
+  const passwordStrength = getPasswordStrength(formData.password);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-white flex items-center justify-center py-12 px-4">
@@ -256,7 +253,7 @@ const RegisterPage = () => {
           {/* Mpesa Number */}
           <div>
             <label htmlFor="mpesaNumber" className="block text-sm font-medium text-gray-700 mb-2">
-              Mpesa Number
+              M-Pesa Number
             </label>
             <div className="relative">
               <Phone className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
@@ -305,6 +302,40 @@ const RegisterPage = () => {
               </button>
             </div>
             {errors.password && <p className="text-red-500 text-sm mt-1">{errors.password}</p>}
+            
+            {/* Password Strength Indicator */}
+            {formData.password && (
+              <div className="mt-2">
+                <div className="flex space-x-1 mb-1">
+                  {[1, 2, 3, 4].map((level) => (
+                    <div
+                      key={level}
+                      className={`h-2 flex-1 rounded-full ${
+                        passwordStrength >= level
+                          ? passwordStrength <= 2
+                            ? 'bg-red-400'
+                            : passwordStrength === 3
+                            ? 'bg-yellow-400'
+                            : 'bg-green-500'
+                          : 'bg-gray-200'
+                      }`}
+                    />
+                  ))}
+                </div>
+                <p className={`text-xs ${
+                  passwordStrength <= 2 ? 'text-red-600' :
+                  passwordStrength === 3 ? 'text-yellow-600' :
+                  'text-green-600'
+                }`}>
+                  Password strength: {
+                    passwordStrength <= 1 ? 'Very Weak' :
+                    passwordStrength === 2 ? 'Weak' :
+                    passwordStrength === 3 ? 'Good' :
+                    'Strong'
+                  }
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Confirm Password */}
@@ -322,7 +353,9 @@ const RegisterPage = () => {
                 onChange={handleInputChange}
                 placeholder="Confirm your password"
                 className={`w-full pl-10 pr-12 py-3 border rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition ${
-                  errors.confirmPassword ? 'border-red-500' : 'border-gray-300'
+                  errors.confirmPassword ? 'border-red-500' : 
+                  formData.confirmPassword && formData.password === formData.confirmPassword ? 'border-green-500' :
+                  'border-gray-300'
                 }`}
                 disabled={isLoading}
               />
@@ -334,6 +367,9 @@ const RegisterPage = () => {
               >
                 {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
               </button>
+              {formData.confirmPassword && formData.password === formData.confirmPassword && (
+                <CheckCircle className="absolute right-10 top-3 h-5 w-5 text-green-500" />
+              )}
             </div>
             {errors.confirmPassword && <p className="text-red-500 text-sm mt-1">{errors.confirmPassword}</p>}
           </div>
@@ -341,7 +377,7 @@ const RegisterPage = () => {
           {/* Submit Button */}
           <button
             type="submit"
-            disabled={isLoading}
+            disabled={isLoading || passwordStrength < 3}
             className="w-full py-3 px-4 rounded-lg bg-emerald-600 text-white font-medium hover:bg-emerald-700 focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 transition disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isLoading ? (
@@ -356,7 +392,7 @@ const RegisterPage = () => {
 
           {/* Password Requirements */}
           <div className="text-xs text-gray-500 bg-gray-50 p-3 rounded-lg">
-            <p className="font-medium mb-1">Password must contain:</p>
+            <p className="font-medium mb-1">Password requirements:</p>
             <ul className="space-y-1">
               <li className={`flex items-center ${formData.password.length >= 8 ? 'text-green-600' : 'text-gray-500'}`}>
                 <span className="mr-2">{formData.password.length >= 8 ? '✓' : '•'}</span>
@@ -389,6 +425,16 @@ const RegisterPage = () => {
               Sign in
             </Link>
           </p>
+        </div>
+
+        {/* Back to Home */}
+        <div className="text-center">
+          <Link
+            to="/"
+            className="text-sm text-gray-600 hover:text-emerald-600 transition-colors duration-200"
+          >
+            ← Back to Home
+          </Link>
         </div>
       </div>
     </div>

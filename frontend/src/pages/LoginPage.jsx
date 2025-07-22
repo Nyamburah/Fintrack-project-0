@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import authService from '../services/authService'; // Fixed: removed destructuring
 import { Wallet, Eye, EyeOff, Mail, Lock, AlertCircle } from 'lucide-react';
 
 /**
@@ -25,7 +26,7 @@ const LoginPage = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const { login } = useAuth();
+  const { login } = useAuth(); // Get login function from auth context
   const navigate = useNavigate();
 
   // Handle form input changes
@@ -65,13 +66,17 @@ const LoginPage = () => {
     }
 
     try {
-      // Call login function from auth context
-      const success = await login(formData.email, formData.password);
-
-      if (success) {
+      // Call login function from auth service
+      const result = await authService.login(formData.email, formData.password);
+      
+      if (result.success) {
+        // If you have an auth context with login function, use it
+        if (login) {
+          login(result.user, result.token);
+        }
         navigate('/dashboard');
       } else {
-        setError('Invalid email or password. Please try again.');
+        setError(result.error);
       }
     } catch (error) {
       setError('An error occurred. Please try again.');
