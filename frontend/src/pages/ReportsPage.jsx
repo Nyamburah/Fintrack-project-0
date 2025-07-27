@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useData } from '../contexts/DataContext';
+import { useData } from '../hooks/useData';
 import { 
   BarChart3, 
   TrendingUp, 

@@ -1,8 +1,8 @@
-const express = require('express');
-const bcrypt = require('bcrypt');
-const jwt = require('jsonwebtoken');
-const User = require('../models/users');
-const { authenticateToken } = require('../middleware/mdw');
+import express from 'express';
+import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken';
+import User from '../models/users.js';
+import { authenticateToken } from '../middleware/mdw.js';
 
 const router = express.Router();
 
@@ -397,4 +397,4 @@ router.get('/health', (req, res) => {
   });
 });
 
-module.exports = router;
+export default router;

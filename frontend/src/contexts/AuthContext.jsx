@@ -1,6 +1,10 @@
 import React, { createContext, useState, useEffect } from 'react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
+import authService from '../services/authService'; // Import your authService
+
+// Set base URL for axios to match your backend
+axios.defaults.baseURL = 'http://localhost:8000';
 
 export const AuthContext = createContext(undefined);
 
@@ -52,16 +56,19 @@ export const AuthProvider = ({ children }) => {
         return;
       }
 
-      const response = await axios.get('/auth/me');
-      if (response.data.success && response.data.user) {
-        setUser(response.data.user);
+      // Use authService instead of direct axios call
+      const result = await authService.getCurrentUser();
+      if (result.success && result.user) {
+        setUser(result.user);
         setIsAuthenticated(true);
       } else {
         localStorage.removeItem('authToken');
+        localStorage.removeItem('user');
       }
     } catch (error) {
       console.error('Auth check failed:', error);
       localStorage.removeItem('authToken');
+      localStorage.removeItem('user');
       setUser(null);
       setIsAuthenticated(false);
     } finally {
@@ -72,19 +79,19 @@ export const AuthProvider = ({ children }) => {
   const login = async (email, password) => {
     try {
       setLoading(true);
-      const response = await axios.post('/auth/login', { email, password });
-      if (response.data.success) {
-        const { token, user: userData } = response.data;
-        localStorage.setItem('authToken', token);
-        setUser(userData);
+      // Use authService for consistency
+      const result = await authService.login(email, password);
+      
+      if (result.success) {
+        setUser(result.user);
         setIsAuthenticated(true);
-        toast.success(`Welcome back, ${userData.name}!`);
-        return { success: true, user: userData };
+        toast.success(`Welcome back, ${result.user.name}!`);
+        return { success: true, user: result.user };
       } else {
-        throw new Error(response.data.error || 'Login failed');
+        throw new Error(result.error || 'Login failed');
       }
     } catch (error) {
-      const errorMessage = error.response?.data?.error || error.message || 'Login failed';
+      const errorMessage = error.message || 'Login failed';
       toast.error(errorMessage);
       return { success: false, error: errorMessage };
     } finally {
@@ -94,11 +101,10 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     try {
-      await axios.post('/auth/logout');
+      await authService.logout(); // This handles token cleanup
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
-      localStorage.removeItem('authToken');
       setUser(null);
       setIsAuthenticated(false);
       toast.success('Logged out successfully');

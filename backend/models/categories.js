@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const categorySchema = new mongoose.Schema({
   name: {
@@ -60,4 +60,37 @@ categorySchema.virtual('usagePercentage').get(function() {
 categorySchema.set('toJSON', { virtuals: true });
 categorySchema.set('toObject', { virtuals: true });
 
-module.exports = mongoose.model('Category', categorySchema);
+// Pre-save middleware to ensure unique category names per user
+categorySchema.pre('save', async function(next) {
+  if (this.isNew || this.isModified('name')) {
+    const existingCategory = await this.constructor.findOne({
+      userId: this.userId,
+      name: { $regex: new RegExp(`^${this.name}$`, 'i') },
+      _id: { $ne: this._id }
+    });
+    
+    if (existingCategory) {
+      const error = new Error('Category name already exists for this user');
+      error.name = 'ValidationError';
+      return next(error);
+    }
+  }
+  next();
+});
+
+// Static method to get categories with spending summary
+categorySchema.statics.getCategoriesWithSpending = function(userId) {
+  return this.find({ userId })
+    .sort({ name: 1 })
+    .lean();
+};
+
+// Instance method to update spent amount
+categorySchema.methods.updateSpent = async function(amount) {
+  this.spent = Math.max(0, this.spent + amount);
+  return this.save();
+};
+
+const Category = mongoose.model('Category', categorySchema);
+
+export default Category;

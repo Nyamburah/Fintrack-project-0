@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useData } from '../contexts/DataContext';
+import { useData } from '../hooks/useData';
 import { 
   Search, 
   Filter, 
@@ -26,26 +26,29 @@ import {
  * - Search and filtering should be optimized with database queries
  */
 const TransactionsPage = () => {
-  const { transactions, categories, updateTransaction, addTransaction } = useData();
+  const { transactions = [], categories = [], updateTransaction, addTransaction } = useData();
   
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
   const [selectedType, setSelectedType] = useState('');
   const [sortBy, setSortBy] = useState('date');
-  // eslint-disable-next-line no-self-compare
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [sortOrder, setSortOrder] = useState('desc');
   const [showAddForm, setShowAddForm] = useState(false);
   const [newTransaction, setNewTransaction] = useState({
     amount: '',
     description: '',
     type: 'expense'
-  })
+  });
 
   // Filter and sort transactions
   const filteredTransactions = transactions
     .filter(transaction => {
-      const matchesSearch = transaction.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          transaction.mpesaCode.toLowerCase().includes(searchTerm.toLowerCase());
+      // Add safety checks for undefined properties
+      const description = transaction.description || '';
+      const mpesaCode = transaction.mpesaCode || '';
+      
+      const matchesSearch = description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          mpesaCode.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesCategory = !selectedCategory || transaction.category === selectedCategory;
       const matchesType = !selectedType || transaction.type === selectedType;
       
@@ -56,12 +59,12 @@ const TransactionsPage = () => {
       
       switch (sortBy) {
         case 'amount':
-          aValue = a.amount;
-          bValue = b.amount;
+          aValue = a.amount || 0;
+          bValue = b.amount || 0;
           break;
         case 'description':
-          aValue = a.description.toLowerCase();
-          bValue = b.description.toLowerCase();
+          aValue = (a.description || '').toLowerCase();
+          bValue = (b.description || '').toLowerCase();
           break;
         default:
           aValue = new Date(a.date).getTime();
@@ -77,10 +80,12 @@ const TransactionsPage = () => {
 
   // Handle category assignment
   const handleCategoryChange = (transactionId, categoryId) => {
-    updateTransaction(transactionId, { 
-      category: categoryId,
-      isLabeled: true
-    });
+    if (updateTransaction) {
+      updateTransaction(transactionId, { 
+        category: categoryId,
+        isLabeled: true
+      });
+    }
   };
 
   // Handle adding new transaction
@@ -91,14 +96,16 @@ const TransactionsPage = () => {
       return;
     }
 
-    addTransaction({
-      amount: parseFloat(newTransaction.amount),
-      description: newTransaction.description,
-      type: newTransaction.type,
-      date: new Date().toISOString(),
-      mpesaCode: 'MANUAL_' + Date.now(),
-      isLabeled: false
-    });
+    if (addTransaction) {
+      addTransaction({
+        amount: parseFloat(newTransaction.amount),
+        description: newTransaction.description,
+        type: newTransaction.type,
+        date: new Date().toISOString(),
+        mpesaCode: 'MANUAL_' + Date.now(),
+        isLabeled: false
+      });
+    }
 
     setNewTransaction({ amount: '', description: '', type: 'expense' });
     setShowAddForm(false);
@@ -209,7 +216,6 @@ const TransactionsPage = () => {
                     onChange={(e) => setNewTransaction({
                       ...newTransaction,
                       type: e.target.value
-
                     })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   >
@@ -283,13 +289,13 @@ const TransactionsPage = () => {
                 <span className="text-gray-600">
                   Total Expenses: ₹{filteredTransactions
                     .filter(t => t.type === 'expense')
-                    .reduce((sum, t) => sum + t.amount, 0)
+                    .reduce((sum, t) => sum + (t.amount || 0), 0)
                     .toLocaleString()}
                 </span>
                 <span className="text-gray-600">
                   Total Income: ₹{filteredTransactions
                     .filter(t => t.type === 'income')
-                    .reduce((sum, t) => sum + t.amount, 0)
+                    .reduce((sum, t) => sum + (t.amount || 0), 0)
                     .toLocaleString()}
                 </span>
               </div>
@@ -337,8 +343,8 @@ const TransactionsPage = () => {
                               )}
                             </div>
                             <div>
-                              <p className="font-medium text-gray-900">{transaction.description}</p>
-                              <p className="text-sm text-gray-500">{transaction.mpesaCode}</p>
+                              <p className="font-medium text-gray-900">{transaction.description || 'No description'}</p>
+                              <p className="text-sm text-gray-500">{transaction.mpesaCode || 'No code'}</p>
                             </div>
                           </div>
                         </td>
@@ -347,7 +353,7 @@ const TransactionsPage = () => {
                           <span className={`font-semibold ${
                             transaction.type === 'expense' ? 'text-red-600' : 'text-emerald-600'
                           }`}>
-                            {transaction.type === 'expense' ? '-' : '+'}₹{transaction.amount.toLocaleString()}
+                            {transaction.type === 'expense' ? '-' : '+'}₹{(transaction.amount || 0).toLocaleString()}
                           </span>
                         </td>
                         

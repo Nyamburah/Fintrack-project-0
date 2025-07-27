@@ -18,6 +18,8 @@ import ReportsPage from './pages/ReportsPage';
 import PaymentPage from './pages/PaymentPage';
 import FinancialTipsPage from './pages/FinancialTipsPage';
 
+
+
 axios.defaults.baseURL = 'http://localhost:8000';
 axios.defaults.withCredentials = true; // Fixed typo
 

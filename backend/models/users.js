@@ -1,5 +1,5 @@
-const mongoose = require('mongoose')
-const {Schema} = mongoose;
+import mongoose from 'mongoose';
+const { Schema } = mongoose;
 
 const userSchema = new Schema({
     name: {
@@ -17,7 +17,7 @@ const userSchema = new Schema({
         type: String,
         required: true,
         trim: true,
-        unique:true
+        unique: true
     },
     password: {
         type: String,
@@ -25,8 +25,8 @@ const userSchema = new Schema({
     }
 }, {
     timestamps: true // This adds createdAt and updatedAt fields
-})
+});
 
 const UserModel = mongoose.model('User', userSchema);
 
-module.exports = UserModel;
+export default UserModel;

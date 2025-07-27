@@ -1,77 +1,68 @@
-const express = require('express');
+import express from 'express';
+import Transaction from '../models/transactions.js';
+import auth from '../middleware/auth.js'; // Your existing auth middleware
+
 const router = express.Router();
-const Transaction = require('../models/transactions');
 
-// Handle preflight requests
-router.options('*', (req, res) => {
-  res.header('Access-Control-Allow-Origin', 'http://localhost:5173');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  res.header('Access-Control-Allow-Credentials', 'true');
-  res.sendStatus(200);
-});
-
-// GET all transactions
-router.get('/', async (req, res) => {
+// Get all transactions for authenticated user
+router.get('/', auth, async (req, res) => {
   try {
-    const transactions = await Transaction.find()
-      .sort({ createdAt: -1 }) // Most recent first
-      .limit(100); // Limit to last 100 transactions
+    const { page = 1, limit = 50, category, type, search } = req.query;
+    const userId = req.user._id;
     
-    res.json(transactions);
-  } catch (error) {
-    console.error('Error fetching transactions:', error);
-    res.status(500).json({ error: 'Failed to fetch transactions' });
-  }
-});
-
-// GET transaction by ID
-router.get('/:id', async (req, res) => {
-  try {
-    const transaction = await Transaction.findById(req.params.id);
-    if (!transaction) {
-      return res.status(404).json({ error: 'Transaction not found' });
+    let query = { userId };
+    
+    if (category && category !== 'all') {
+      if (category === 'unlabeled') {
+        query.isLabeled = false;
+      } else {
+        query.category = category;
+      }
     }
-    res.json(transaction);
-  } catch (error) {
-    console.error('Error fetching transaction:', error);
-    res.status(500).json({ error: 'Failed to fetch transaction' });
-  }
-});
-
-// POST create new transaction (usually called by M-PESA callback)
-router.post('/', async (req, res) => {
-  try {
-    const transaction = new Transaction(req.body);
-    await transaction.save();
-    res.status(201).json(transaction);
-  } catch (error) {
-    console.error('Error creating transaction:', error);
-    res.status(500).json({ error: 'Failed to create transaction' });
-  }
-});
-
-// GET transactions by phone number
-router.get('/phone/:phoneNumber', async (req, res) => {
-  try {
-    const transactions = await Transaction.find({ 
-      phoneNumber: req.params.phoneNumber 
-    }).sort({ createdAt: -1 });
     
-    res.json(transactions);
+    if (type && type !== 'all') {
+      query.transactionType = type;
+    }
+    
+    if (search) {
+      query.$or = [
+        { description: { $regex: search, $options: 'i' } },
+        { mpesaReceiptNumber: { $regex: search, $options: 'i' } },
+        { senderName: { $regex: search, $options: 'i' } }
+      ];
+    }
+    
+    const transactions = await Transaction.find(query)
+      .sort({ transactionDate: -1 })
+      .limit(limit * 1)
+      .skip((page - 1) * limit)
+      .lean();
+    
+    const total = await Transaction.countDocuments(query);
+    
+    res.json({
+      transactions,
+      totalPages: Math.ceil(total / limit),
+      currentPage: page,
+      total
+    });
+    
   } catch (error) {
-    console.error('Error fetching transactions by phone:', error);
+    console.error('Get transactions error:', error);
     res.status(500).json({ error: 'Failed to fetch transactions' });
   }
 });
 
-// PUT update transaction category
-router.put('/:id/category', async (req, res) => {
+// Update transaction category
+router.patch('/:id/category', auth, async (req, res) => {
   try {
+    const { id } = req.params;
     const { category } = req.body;
-    const transaction = await Transaction.findByIdAndUpdate(
-      req.params.id,
-      { category },
+    const userId = req.user._id;
+    
+    const transaction = await Transaction.findOneAndUpdate(
+      { _id: id, userId },
+      { category, isLabeled: !!category },
       { new: true }
     );
     
@@ -81,9 +72,9 @@ router.put('/:id/category', async (req, res) => {
     
     res.json(transaction);
   } catch (error) {
-    console.error('Error updating transaction category:', error);
-    res.status(500).json({ error: 'Failed to update transaction category' });
+    console.error('Update category error:', error);
+    res.status(500).json({ error: 'Failed to update category' });
   }
 });
 
-module.exports = router;
+export default router;

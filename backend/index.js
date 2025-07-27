@@ -1,8 +1,14 @@
-require('dotenv').config();
-const express = require('express');
-const cors = require('cors');
-const mongoose = require('mongoose');
-const cookieParser = require('cookie-parser');
+import 'dotenv/config';
+import express from 'express';
+import cors from 'cors';
+import mongoose from 'mongoose';
+import cookieParser from 'cookie-parser';
+
+// Import routes
+import authRoutes from './routes/auth.js';
+import mpesaRoutes from './routes/mpesa.js';
+import categoriesRoutes from './routes/categories.js';
+import transactionsRoutes from './routes/transactions.js';
 
 const app = express();
 const PORT = process.env.PORT || 8000;
@@ -94,10 +100,10 @@ mongoose.connection.on('disconnected', () => {
 // ---------------------
 // 🛣️ Routes & Endpoints
 // ---------------------
-app.use('/api/auth', require('./routes/auth'));
-app.use('/api/mpesa', require('./routes/mpesa'));
-app.use('/api/categories', require('./routes/categories'));
-app.use('/api/transactions', require('./routes/transactions'));
+app.use('/api/auth', authRoutes);
+app.use('/api/mpesa', mpesaRoutes);
+app.use('/api/categories', categoriesRoutes);
+app.use('/api/transactions', transactionsRoutes);
 
 // 🔍 Health checks
 app.get('/health', (req, res) => {
@@ -178,3 +184,18 @@ app.listen(PORT, () => {
   console.log(`📊 Health check: http://localhost:${PORT}/health`);
   console.log(`🔐 Auth routes:   http://localhost:${PORT}/api/auth`);
 });
+
+// Graceful shutdown
+process.on('SIGTERM', async () => {
+  console.log('🛑 SIGTERM received, shutting down gracefully');
+  await mongoose.connection.close();
+  process.exit(0);
+});
+
+process.on('SIGINT', async () => {
+  console.log('🛑 SIGINT received, shutting down gracefully');
+  await mongoose.connection.close();
+  process.exit(0);
+});
+
+export default app;
