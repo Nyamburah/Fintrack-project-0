@@ -121,9 +121,34 @@ class AuthService {
   async login(email, password) {
     try {
       console.log('🔐 AuthService: Attempting login');
-      if (!email || !password) throw new Error('Email and password are required');
-      const cleanData = { email: email.toLowerCase().trim(), password };
+      console.log('🔍 Debug - email type:', typeof email, 'value:', email);
+      console.log('🔍 Debug - password type:', typeof password, 'value:', password ? '[PROVIDED]' : '[MISSING]');
+      
+      // More robust validation
+      if (!email || !password) {
+        throw new Error('Email and password are required');
+      }
+      
+      // Ensure email is a string
+      const emailStr = String(email || '');
+      const passwordStr = String(password || '');
+      
+      if (!emailStr.trim() || !passwordStr.trim()) {
+        throw new Error('Email and password cannot be empty');
+      }
+      
+      const cleanData = { 
+        email: emailStr.toLowerCase().trim(), 
+        password: passwordStr 
+      };
+      
+      console.log('🔐 AuthService: Sending login request with:', {
+        email: cleanData.email,
+        password: '[HIDDEN]'
+      });
+      
       const response = await apiClient.post('/auth/login', cleanData);
+      
       if (response.data.success && response.data.token) {
         localStorage.setItem('authToken', response.data.token);
         localStorage.setItem('user', JSON.stringify(response.data.user));
@@ -136,10 +161,12 @@ class AuthService {
           message: response.data.message || 'Login successful'
         };
       }
+      
       return {
         success: false,
         error: response.data.error || response.data.message || 'Login failed'
       };
+      
     } catch (error) {
       console.error('❌ AuthService: Login error:', error);
       if (error.response) {

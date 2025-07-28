@@ -1,4 +1,4 @@
-const Transaction = require('../models/Transaction');
+/*const Transaction = require('../models/Transaction');
 const mpesaService = require('./mpesaService');
 
 class TransactionService {
@@ -105,4 +105,4 @@ class TransactionService {
     }
 }
 
-module.exports = new TransactionService();
+module.exports = new TransactionService();*/

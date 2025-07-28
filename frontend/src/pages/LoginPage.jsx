@@ -24,21 +24,39 @@ const LoginPage = () => {
     setIsLoading(true);
     setError('');
 
-    if (!formData.email || !formData.password) {
+    // Debug logging
+    console.log('🔍 Form data before processing:', {
+      email: formData.email,
+      emailType: typeof formData.email,
+      password: formData.password ? '[PROVIDED]' : '[MISSING]',
+      passwordType: typeof formData.password
+    });
+
+    // Extract values safely
+    const emailValue = String(formData.email || '').trim();
+    const passwordValue = String(formData.password || '').trim();
+
+    if (!emailValue || !passwordValue) {
       setError('Please fill in all fields');
       setIsLoading(false);
       return;
     }
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/; // ✅ Fixed regex
-    if (!emailRegex.test(formData.email)) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(emailValue)) {
       setError('Please enter a valid email address');
       setIsLoading(false);
       return;
     }
 
     try {
-      const result = await authService.login(formData.email, formData.password);
+      console.log('🔐 About to call authService.login with:', {
+        email: emailValue,
+        password: '[HIDDEN]'
+      });
+
+      // Pass the extracted string values
+      const result = await authService.login(emailValue, passwordValue);
 
       if (result.success) {
         if (login) {
