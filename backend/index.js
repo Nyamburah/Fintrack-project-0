@@ -8,7 +8,7 @@ import cookieParser from 'cookie-parser';
 import authRoutes from './routes/auth.js';
 import mpesaRoutes from './routes/mpesa.js';
 import categoriesRoutes from './routes/categories.js';
-//import transactionsRoutes from './routes/transactions.js';
+import transactionsRoutes from './routes/transactions.js'; // ✅ UNCOMMENTED
 
 const app = express();
 const PORT = process.env.PORT || 8000;
@@ -103,7 +103,7 @@ mongoose.connection.on('disconnected', () => {
 app.use('/api/auth', authRoutes);
 app.use('/api/mpesa', mpesaRoutes);
 app.use('/api/categories', categoriesRoutes);
-//app.use('/api/transactions', transactionsRoutes);
+app.use('/api/transactions', transactionsRoutes); // ✅ ENABLED
 
 // 🔍 Health checks
 app.get('/health', (req, res) => {
@@ -183,6 +183,7 @@ app.listen(PORT, () => {
   console.log(`\n🚀 Server running at: http://localhost:${PORT}`);
   console.log(`📊 Health check: http://localhost:${PORT}/health`);
   console.log(`🔐 Auth routes:   http://localhost:${PORT}/api/auth`);
+  console.log(`💰 Transactions: http://localhost:${PORT}/api/transactions`);
 });
 
 // Graceful shutdown

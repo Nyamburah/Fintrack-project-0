@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { transactionsAPI } from '../services/api';
 
 export const useTransactions = () => {
@@ -18,7 +18,7 @@ export const useTransactions = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, []); // Remove the dependency array to prevent infinite loop
 
   const updateTransactionCategory = useCallback(async (transactionId, category) => {
     try {
@@ -36,9 +36,10 @@ export const useTransactions = () => {
     }
   }, []);
 
-  useEffect(() => {
-    fetchTransactions();
-  }, [fetchTransactions]);
+  // Remove automatic fetching - transactions will be added manually
+  // useEffect(() => {
+  //   fetchTransactions();
+  // }, []);
 
   return {
     transactions,

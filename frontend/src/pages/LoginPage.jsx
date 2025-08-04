@@ -24,52 +24,96 @@ const LoginPage = () => {
     setIsLoading(true);
     setError('');
 
-    // Debug logging
-    console.log('🔍 Form data before processing:', {
-      email: formData.email,
-      emailType: typeof formData.email,
-      password: formData.password ? '[PROVIDED]' : '[MISSING]',
-      passwordType: typeof formData.password
-    });
+    const { email, password } = formData;
 
-    // Extract values safely
-    const emailValue = String(formData.email || '').trim();
-    const passwordValue = String(formData.password || '').trim();
-
-    if (!emailValue || !passwordValue) {
+    // Basic validation
+    if (!email?.trim() || !password?.trim()) {
       setError('Please fill in all fields');
       setIsLoading(false);
       return;
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(emailValue)) {
+    if (!emailRegex.test(email.trim())) {
       setError('Please enter a valid email address');
       setIsLoading(false);
       return;
     }
 
     try {
-      console.log('🔐 About to call authService.login with:', {
-        email: emailValue,
-        password: '[HIDDEN]'
-      });
+      console.log('Starting login process...');
+      console.log('Email:', email);
+      
+      // Call authService.login with proper error handling
+      const result = await authService.login(email.trim(), password);
+      
+      console.log('Login result:', result);
 
-      // Pass the extracted string values
-      const result = await authService.login(emailValue, passwordValue);
-
-      if (result.success) {
-        if (login) {
-          console.log('🔑 Calling login() from AuthContext...');
-          await login(result.user, result.token);
+      // Check if the result indicates success
+      if (result && (result.success === true || result.token)) {
+        // Store token in localStorage or handle as needed
+        if (result.token) {
+          localStorage.setItem('authToken', result.token);
         }
+        if (result.user) {
+          localStorage.setItem('user', JSON.stringify(result.user));
+        }
+        
+        // Call the login function from useAuth hook if it exists
+        if (login && typeof login === 'function') {
+          try {
+            await login(result.user || { email }, result.token);
+          } catch (authError) {
+            console.error('Auth context login error:', authError);
+            // Continue with navigation even if auth context fails
+          }
+        }
+        
+        // Navigate to dashboard
+        console.log('Login successful, navigating to dashboard');
         navigate('/dashboard');
       } else {
-        setError(result.error);
+        // Handle various error scenarios
+        const errorMessage = result?.error || result?.message || 'Login failed. Please try again.';
+        setError(errorMessage);
+        console.error('Login failed:', errorMessage);
       }
     } catch (err) {
-      setError('An error occurred. Please try again.');
       console.error('Login error:', err);
+      
+      // Handle different types of errors
+      if (err.response) {
+        // Server responded with an error status
+        const status = err.response.status;
+        const data = err.response.data;
+        
+        console.error('Server error response:', { status, data });
+        
+        switch (status) {
+          case 401:
+            setError('Invalid email or password. Please check your credentials and try again.');
+            break;
+          case 400:
+            setError(data?.message || 'Invalid request. Please check your input.');
+            break;
+          case 404:
+            setError('Login service not found. Please contact support.');
+            break;
+          case 500:
+            setError('Server error. Please try again later.');
+            break;
+          default:
+            setError(data?.message || 'Login failed. Please try again.');
+        }
+      } else if (err.request) {
+        // Network error
+        console.error('Network error:', err.request);
+        setError('Network error. Please check your internet connection and try again.');
+      } else {
+        // Other error
+        console.error('Unexpected error:', err.message);
+        setError(err.message || 'An unexpected error occurred. Please try again.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -153,7 +197,7 @@ const LoginPage = () => {
             <button
               type="submit"
               disabled={isLoading}
-              className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 disabled:opacity-50"
+              className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? (
                 <div className="flex items-center space-x-2">

@@ -8,7 +8,7 @@ import {
 const API_BASE_URL = 'http://localhost:8000/api';
 
 /**
- * Categories Page - No Dummy Data Version
+ * Categories Page - Fixed Token Management Version
  * Real backend integration with comprehensive error handling
  */
 const CategoriesPage = () => {
@@ -41,16 +41,35 @@ const CategoriesPage = () => {
     '#F43F5E', '#6B7280', '#374151', '#1F2937'
   ];
 
-  // Get auth token with error handling
+  // Fixed: Get auth token with proper fallback strategy
   const getAuthToken = useCallback(() => {
     try {
-      const userStr = localStorage.getItem('user');
-      if (!userStr) return null;
+      // Primary: Get token directly from localStorage where authService stores it
+      let token = localStorage.getItem('authToken');
       
-      const user = JSON.parse(userStr);
-      return user?.token || null;
+      // Fallback: try to get from user object (for backward compatibility)
+      if (!token) {
+        const userStr = localStorage.getItem('user');
+        if (userStr) {
+          const user = JSON.parse(userStr);
+          token = user?.token || null;
+        }
+      }
+      
+      if (!token) {
+        console.warn('No authentication token found in localStorage');
+        // Redirect to login if no token found
+        window.location.href = '/login';
+        return null;
+      }
+      
+      return token;
     } catch (error) {
-      console.error('Error parsing user data from localStorage:', error);
+      console.error('Error getting auth token:', error);
+      // Clear potentially corrupted data
+      localStorage.removeItem('user');
+      localStorage.removeItem('authToken');
+      window.location.href = '/login';
       return null;
     }
   }, []);
@@ -91,7 +110,11 @@ const CategoriesPage = () => {
         }
 
         if (response.status === 401) {
-          errorMessage = 'Session expired. Please log in again.';
+          // Clear auth data and redirect to login
+          localStorage.removeItem('authToken');
+          localStorage.removeItem('user');
+          window.location.href = '/login';
+          throw new Error('Session expired. Please log in again.');
         } else if (response.status === 403) {
           errorMessage = 'Access denied. You don\'t have permission for this action.';
         } else if (response.status >= 500) {
@@ -123,6 +146,7 @@ const CategoriesPage = () => {
       setLoading(true);
       setError(null);
       
+      console.log('🔄 Fetching categories...');
       const data = await apiCall('/categories');
       
       // Validate response data
@@ -143,14 +167,16 @@ const CategoriesPage = () => {
       }));
       
       setCategories(validatedCategories);
+      console.log(`✅ Successfully loaded ${validatedCategories.length} categories`);
     } catch (error) {
-      console.error('Error fetching categories:', error);
+      console.error('❌ Error fetching categories:', error);
       
       // Retry logic for network errors
       if (retryCount < 2 && (
         error.message.includes('Network error') || 
         error.message.includes('timed out')
       )) {
+        console.log(`🔄 Retrying... (attempt ${retryCount + 2})`);
         setTimeout(() => fetchCategories(retryCount + 1), 1000 * (retryCount + 1));
         return;
       }
@@ -173,9 +199,10 @@ const CategoriesPage = () => {
       errors.name = 'Category name must be less than 50 characters';
     }
 
-    // Check for duplicate names
+    // Check for duplicate names (case-insensitive)
     if (categories.some(cat => 
-      cat.name.toLowerCase() === newCategory.name.trim().toLowerCase()
+      cat.name.toLowerCase() === newCategory.name.trim().toLowerCase() &&
+      cat._id !== editingCategory
     )) {
       errors.name = 'A category with this name already exists';
     }
@@ -192,7 +219,7 @@ const CategoriesPage = () => {
     
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
-  }, [newCategory, categories]);
+  }, [newCategory, categories, editingCategory]);
 
   // Reset form
   const resetForm = useCallback(() => {
@@ -220,6 +247,7 @@ const CategoriesPage = () => {
         description: newCategory.description.trim()
       };
 
+      console.log('📝 Creating category:', categoryData);
       const savedCategory = await apiCall('/categories', {
         method: 'POST',
         body: JSON.stringify(categoryData)
@@ -240,8 +268,9 @@ const CategoriesPage = () => {
       setCategories(prev => [validatedCategory, ...prev]);
       resetForm();
       setShowAddForm(false);
+      console.log('✅ Category created successfully');
     } catch (error) {
-      console.error('Error adding category:', error);
+      console.error('❌ Error adding category:', error);
       setError(error.message);
     } finally {
       setSubmitting(false);
@@ -273,6 +302,7 @@ const CategoriesPage = () => {
         return;
       }
 
+      console.log('📝 Updating category:', id, updates);
       const updatedCategory = await apiCall(`/categories/${id}`, {
         method: 'PUT',
         body: JSON.stringify(updates)
@@ -287,8 +317,9 @@ const CategoriesPage = () => {
       );
       setEditingCategory(null);
       setError(null);
+      console.log('✅ Category updated successfully');
     } catch (error) {
-      console.error('Error updating category:', error);
+      console.error('❌ Error updating category:', error);
       setError(error.message);
     }
   }, [categories, apiCall]);
@@ -298,6 +329,7 @@ const CategoriesPage = () => {
     if (!id) return;
     
     try {
+      console.log('🗑️ Deleting category:', id);
       await apiCall(`/categories/${id}`, {
         method: 'DELETE'
       });
@@ -305,8 +337,9 @@ const CategoriesPage = () => {
       setCategories(prev => prev.filter(cat => cat._id !== id));
       setDeleteConfirm(null);
       setError(null);
+      console.log('✅ Category deleted successfully');
     } catch (error) {
-      console.error('Error deleting category:', error);
+      console.error('❌ Error deleting category:', error);
       setError(error.message);
     }
   }, [apiCall]);
