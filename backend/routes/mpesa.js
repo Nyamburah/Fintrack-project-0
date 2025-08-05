@@ -1,5 +1,5 @@
 import express from 'express';
-import Transaction from '../models/transactions.js';
+import Transaction from '../models/transaction.js';
 import User from '../models/users.js';
 
 const router = express.Router();

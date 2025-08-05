@@ -35,7 +35,7 @@ const LandingPage = () => {
               <div className="bg-emerald-600 p-2 rounded-lg">
                 <Wallet className="h-6 w-6 text-white" />
               </div>
-              <span className="text-xl font-bold text-gray-900">FinWallet</span>
+              <span className="text-xl font-bold text-gray-900">FinTrack</span>
             </div>
             
             <div className="flex items-center space-x-4">

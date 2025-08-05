@@ -70,15 +70,6 @@ const Dashboard = () => {
       iconBg: 'bg-purple-100'
     },
     {
-      to: '/budgets',
-      icon: Target,
-      label: 'Set Budgets',
-      bgColor: 'bg-emerald-50',
-      hoverColor: 'hover:bg-emerald-100',
-      textColor: 'text-emerald-700',
-      iconBg: 'bg-emerald-100'
-    },
-    {
       to: '/reports',
       icon: BarChart3,
       label: 'View Reports',
