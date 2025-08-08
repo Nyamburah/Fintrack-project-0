@@ -4,6 +4,7 @@ import { BrowserRouter as Router, Routes, Route, Outlet } from 'react-router-dom
 import axios from 'axios';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider } from './contexts/AuthContext';
+import { CategoriesProvider } from './contexts/CategoriesContext';
 import { DataProvider } from './contexts/DataContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Navbar from './components/Navbar';
@@ -37,44 +38,46 @@ const ProtectedLayout = () => (
 function App() {
   return (
     <AuthProvider>
-      <DataProvider>
-        <Router>
-          <div className="min-h-screen bg-gray-50">
-            <Routes>
-              {/* Public Routes */}
-              <Route path="/" element={<LandingPage />} />
-              <Route path="/login" element={<LoginPage />} />
-              <Route path="/register" element={<RegisterPage />} />
+      <CategoriesProvider>
+        <DataProvider>
+          <Router>
+            <div className="min-h-screen bg-gray-50">
+              <Routes>
+                {/* Public Routes */}
+                <Route path="/" element={<LandingPage />} />
+                <Route path="/login" element={<LoginPage />} />
+                <Route path="/register" element={<RegisterPage />} />
 
-              {/* Protected Routes with layout */}
-              <Route
-                element={
-                  <ProtectedRoute>
-                    <ProtectedLayout />
-                  </ProtectedRoute>
-                }
-              >
-                <Route path="/dashboard" element={<Dashboard />} />
-                <Route path="/transactions" element={<TransactionsPage />} />
-                <Route path="/categories" element={<CategoriesPage />} />
-                <Route path="/reports" element={<ReportsPage />} />
-                <Route path="/payment" element={<PaymentPage />} />
-                <Route path="/tips" element={<FinancialTipsPage />} />
-              </Route>
+                {/* Protected Routes with layout */}
+                <Route
+                  element={
+                    <ProtectedRoute>
+                      <ProtectedLayout />
+                    </ProtectedRoute>
+                  }
+                >
+                  <Route path="/dashboard" element={<Dashboard />} />
+                  <Route path="/transactions" element={<TransactionsPage />} />
+                  <Route path="/categories" element={<CategoriesPage />} />
+                  <Route path="/reports" element={<ReportsPage />} />
+                  <Route path="/payment" element={<PaymentPage />} />
+                  <Route path="/tips" element={<FinancialTipsPage />} />
+                </Route>
 
-              {/* Catch-all route */}
-              <Route
-                path="*"
-                element={
-                  <div className="p-8 text-center text-gray-600 text-xl">
-                    404 - Page Not Found
-                  </div>
-                }
-              />
-            </Routes>
-          </div>
-        </Router>
-      </DataProvider>
+                {/* Catch-all route */}
+                <Route
+                  path="*"
+                  element={
+                    <div className="p-8 text-center text-gray-600 text-xl">
+                      404 - Page Not Found
+                    </div>
+                  }
+                />
+              </Routes>
+            </div>
+          </Router>
+        </DataProvider>
+      </CategoriesProvider>
     </AuthProvider>
   );
 }

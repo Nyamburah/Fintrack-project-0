@@ -4,22 +4,31 @@ import {
   TrendingUp, TrendingDown, Palette,
   Loader, AlertCircle, X 
 } from 'lucide-react';
-
-const API_BASE_URL = 'http://localhost:8000/api';
+import { useCategories } from '../contexts/CategoriesContext';
 
 /**
- * Categories Page - Fixed Token Management Version
- * Real backend integration with comprehensive error handling
+ * Categories Page - Context Integration Version
+ * Uses CategoriesContext for state management
  */
 const CategoriesPage = () => {
-  // State management
-  const [categories, setCategories] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  // Get categories state and functions from context
+  const { 
+    categories, 
+    loading: categoriesLoading, 
+    error: categoriesError,
+    addCategory,
+    updateCategory, 
+    deleteCategory,
+    refreshCategories,
+    clearError
+  } = useCategories();
+
+  // Local UI state
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingCategory, setEditingCategory] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [localError, setLocalError] = useState(null);
 
   // New category form state
   const [newCategory, setNewCategory] = useState({
@@ -41,151 +50,8 @@ const CategoriesPage = () => {
     '#F43F5E', '#6B7280', '#374151', '#1F2937'
   ];
 
-  // Fixed: Get auth token with proper fallback strategy
-  const getAuthToken = useCallback(() => {
-    try {
-      // Primary: Get token directly from localStorage where authService stores it
-      let token = localStorage.getItem('authToken');
-      
-      // Fallback: try to get from user object (for backward compatibility)
-      if (!token) {
-        const userStr = localStorage.getItem('user');
-        if (userStr) {
-          const user = JSON.parse(userStr);
-          token = user?.token || null;
-        }
-      }
-      
-      if (!token) {
-        console.warn('No authentication token found in localStorage');
-        // Redirect to login if no token found
-        window.location.href = '/login';
-        return null;
-      }
-      
-      return token;
-    } catch (error) {
-      console.error('Error getting auth token:', error);
-      // Clear potentially corrupted data
-      localStorage.removeItem('user');
-      localStorage.removeItem('authToken');
-      window.location.href = '/login';
-      return null;
-    }
-  }, []);
-
-  // Enhanced API call helper with better error handling
-  const apiCall = useCallback(async (endpoint, options = {}) => {
-    const token = getAuthToken();
-    if (!token) {
-      throw new Error('Authentication required. Please log in again.');
-    }
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
-
-    try {
-      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-        signal: controller.signal,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-          ...options.headers
-        },
-        ...options
-      });
-
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        let errorMessage = `Request failed with status ${response.status}`;
-        
-        try {
-          const errorData = await response.json();
-          errorMessage = errorData.error || errorData.message || errorMessage;
-        // eslint-disable-next-line no-unused-vars
-        } catch (parseError) {
-          // If response isn't JSON, use status text
-          errorMessage = response.statusText || errorMessage;
-        }
-
-        if (response.status === 401) {
-          // Clear auth data and redirect to login
-          localStorage.removeItem('authToken');
-          localStorage.removeItem('user');
-          window.location.href = '/login';
-          throw new Error('Session expired. Please log in again.');
-        } else if (response.status === 403) {
-          errorMessage = 'Access denied. You don\'t have permission for this action.';
-        } else if (response.status >= 500) {
-          errorMessage = 'Server error. Please try again later.';
-        }
-
-        throw new Error(errorMessage);
-      }
-
-      return response.json();
-    } catch (error) {
-      clearTimeout(timeoutId);
-      
-      if (error.name === 'AbortError') {
-        throw new Error('Request timed out. Please check your connection.');
-      }
-      
-      if (error instanceof TypeError && error.message.includes('fetch')) {
-        throw new Error('Network error. Please check your connection.');
-      }
-      
-      throw error;
-    }
-  }, [getAuthToken]);
-
-  // Fetch categories with retry logic
-  const fetchCategories = useCallback(async (retryCount = 0) => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      console.log('🔄 Fetching categories...');
-      const data = await apiCall('/categories');
-      
-      // Validate response data
-      if (!Array.isArray(data)) {
-        throw new Error('Invalid response format from server');
-      }
-      
-      // Ensure each category has required fields with defaults
-      const validatedCategories = data.map(category => ({
-        _id: category._id || category.id,
-        name: category.name || 'Unnamed Category',
-        color: category.color || '#3B82F6',
-        budget: Number(category.budget) || 0,
-        spent: Number(category.spent) || 0,
-        description: category.description || '',
-        createdAt: category.createdAt,
-        updatedAt: category.updatedAt
-      }));
-      
-      setCategories(validatedCategories);
-      console.log(`✅ Successfully loaded ${validatedCategories.length} categories`);
-    } catch (error) {
-      console.error('❌ Error fetching categories:', error);
-      
-      // Retry logic for network errors
-      if (retryCount < 2 && (
-        error.message.includes('Network error') || 
-        error.message.includes('timed out')
-      )) {
-        console.log(`🔄 Retrying... (attempt ${retryCount + 2})`);
-        setTimeout(() => fetchCategories(retryCount + 1), 1000 * (retryCount + 1));
-        return;
-      }
-      
-      setError(error.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [apiCall]);
+  // Combined error handling
+  const currentError = localError || categoriesError;
 
   // Form validation
   const validateForm = useCallback(() => {
@@ -232,13 +98,13 @@ const CategoriesPage = () => {
     setFormErrors({});
   }, []);
 
-  // Add new category with validation
+  // Add new category using context
   const handleAddCategory = useCallback(async () => {
     if (!validateForm() || submitting) return;
 
     try {
       setSubmitting(true);
-      setError(null);
+      setLocalError(null);
       
       const categoryData = {
         name: newCategory.name.trim(),
@@ -248,36 +114,24 @@ const CategoriesPage = () => {
       };
 
       console.log('📝 Creating category:', categoryData);
-      const savedCategory = await apiCall('/categories', {
-        method: 'POST',
-        body: JSON.stringify(categoryData)
-      });
+      const result = await addCategory(categoryData);
 
-      // Ensure the saved category has all required fields
-      const validatedCategory = {
-        _id: savedCategory._id || savedCategory.id,
-        name: savedCategory.name,
-        color: savedCategory.color,
-        budget: Number(savedCategory.budget) || 0,
-        spent: Number(savedCategory.spent) || 0,
-        description: savedCategory.description || '',
-        createdAt: savedCategory.createdAt,
-        updatedAt: savedCategory.updatedAt
-      };
-
-      setCategories(prev => [validatedCategory, ...prev]);
-      resetForm();
-      setShowAddForm(false);
-      console.log('✅ Category created successfully');
+      if (result.success) {
+        resetForm();
+        setShowAddForm(false);
+        console.log('✅ Category created successfully');
+      } else {
+        setLocalError(result.error || 'Failed to create category');
+      }
     } catch (error) {
       console.error('❌ Error adding category:', error);
-      setError(error.message);
+      setLocalError(error.message || 'Failed to create category');
     } finally {
       setSubmitting(false);
     }
-  }, [newCategory, validateForm, submitting, apiCall, resetForm]);
+  }, [newCategory, validateForm, submitting, addCategory, resetForm]);
 
-  // Update category with validation
+  // Update category using context
   const handleUpdateCategory = useCallback(async (id, updates) => {
     if (!id || !updates) return;
     
@@ -285,64 +139,59 @@ const CategoriesPage = () => {
       // Validate updates
       if (updates.name !== undefined) {
         if (!updates.name.trim()) {
-          setError('Category name cannot be empty');
+          setLocalError('Category name cannot be empty');
           return;
         }
         if (categories.some(cat => 
           cat._id !== id && 
           cat.name.toLowerCase() === updates.name.trim().toLowerCase()
         )) {
-          setError('A category with this name already exists');
+          setLocalError('A category with this name already exists');
           return;
         }
       }
       
       if (updates.budget !== undefined && (isNaN(Number(updates.budget)) || Number(updates.budget) < 0)) {
-        setError('Budget must be a valid positive number');
+        setLocalError('Budget must be a valid positive number');
         return;
       }
 
       console.log('📝 Updating category:', id, updates);
-      const updatedCategory = await apiCall(`/categories/${id}`, {
-        method: 'PUT',
-        body: JSON.stringify(updates)
-      });
+      const result = await updateCategory(id, updates);
 
-      setCategories(prev => 
-        prev.map(cat => cat._id === id ? {
-          ...cat,
-          ...updatedCategory,
-          _id: cat._id // Ensure ID consistency
-        } : cat)
-      );
-      setEditingCategory(null);
-      setError(null);
-      console.log('✅ Category updated successfully');
+      if (result.success) {
+        setEditingCategory(null);
+        setLocalError(null);
+        console.log('✅ Category updated successfully');
+      } else {
+        setLocalError(result.error || 'Failed to update category');
+      }
     } catch (error) {
       console.error('❌ Error updating category:', error);
-      setError(error.message);
+      setLocalError(error.message || 'Failed to update category');
     }
-  }, [categories, apiCall]);
+  }, [categories, updateCategory]);
 
-  // Delete category with confirmation
+  // Delete category using context
   const handleDeleteCategory = useCallback(async (id) => {
     if (!id) return;
     
     try {
       console.log('🗑️ Deleting category:', id);
-      await apiCall(`/categories/${id}`, {
-        method: 'DELETE'
-      });
+      const result = await deleteCategory(id);
 
-      setCategories(prev => prev.filter(cat => cat._id !== id));
-      setDeleteConfirm(null);
-      setError(null);
-      console.log('✅ Category deleted successfully');
+      if (result.success) {
+        setDeleteConfirm(null);
+        setLocalError(null);
+        console.log('✅ Category deleted successfully');
+      } else {
+        setLocalError(result.error || 'Failed to delete category');
+      }
     } catch (error) {
       console.error('❌ Error deleting category:', error);
-      setError(error.message);
+      setLocalError(error.message || 'Failed to delete category');
     }
-  }, [apiCall]);
+  }, [deleteCategory]);
 
   // Calculate category statistics with safety checks
   const getCategoryStats = useCallback((category) => {
@@ -377,10 +226,13 @@ const CategoriesPage = () => {
     }
   }, [submitting, resetForm]);
 
-  // Load categories on component mount
-  useEffect(() => {
-    fetchCategories();
-  }, [fetchCategories]);
+  // Clear errors
+  const handleClearError = useCallback(() => {
+    setLocalError(null);
+    if (clearError) {
+      clearError();
+    }
+  }, [clearError]);
 
   // Handle escape key for modals
   useEffect(() => {
@@ -403,7 +255,7 @@ const CategoriesPage = () => {
   }, [showAddForm, submitting, deleteConfirm, editingCategory, handleCloseModal]);
 
   // Loading state
-  if (loading) {
+  if (categoriesLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
@@ -419,13 +271,13 @@ const CategoriesPage = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
 
         {/* Error Alert */}
-        {error && (
+        {currentError && (
           <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
             <div className="flex items-center">
               <AlertCircle className="h-5 w-5 text-red-500 mr-2 flex-shrink-0" />
-              <span className="text-red-700 flex-1">{error}</span>
+              <span className="text-red-700 flex-1">{currentError}</span>
               <button 
-                onClick={() => setError(null)}
+                onClick={handleClearError}
                 className="ml-2 text-red-500 hover:text-red-700 flex-shrink-0"
                 aria-label="Close error message"
               >
@@ -435,7 +287,7 @@ const CategoriesPage = () => {
           </div>
         )}
 
-        {/* Page Header */}
+        {/* Page Header with Refresh Button */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Categories</h1>
@@ -443,13 +295,24 @@ const CategoriesPage = () => {
               Organize your transactions with custom categories and budgets.
             </p>
           </div>
-          <button
-            onClick={() => setShowAddForm(true)}
-            className="mt-4 sm:mt-0 bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 flex items-center space-x-2 transition-colors"
-          >
-            <Plus className="h-4 w-4" />
-            <span>Add Category</span>
-          </button>
+          <div className="flex items-center space-x-3 mt-4 sm:mt-0">
+            <button
+              onClick={() => refreshCategories()}
+              disabled={categoriesLoading}
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 flex items-center space-x-2 transition-colors"
+              title="Refresh categories"
+            >
+              <Loader className={`h-4 w-4 ${categoriesLoading ? 'animate-spin' : ''}`} />
+              <span>Refresh</span>
+            </button>
+            <button
+              onClick={() => setShowAddForm(true)}
+              className="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 flex items-center space-x-2 transition-colors"
+            >
+              <Plus className="h-4 w-4" />
+              <span>Add Category</span>
+            </button>
+          </div>
         </div>
 
         {/* Add Category Modal */}
