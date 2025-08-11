@@ -1,252 +1,95 @@
 import mongoose from 'mongoose';
 
+const { Types } = mongoose;
+
 const transactionSchema = new mongoose.Schema({
-  amount: { 
-    type: Number, 
-    required: true,
-    min: [0.01, 'Amount must be greater than 0']
+  amount: {
+    type: Number,
+    required: [true, 'Transaction amount is required'],
+    min: [0.01, 'Transaction amount must be greater than 0']
   },
-  description: { 
-    type: String, 
-    required: true,
+  description: {
+    type: String,
+    required: [true, 'Transaction description is required'],
     trim: true,
-    maxlength: [500, 'Description cannot exceed 500 characters']
+    maxlength: [200, 'Description cannot exceed 200 characters']
   },
-  type: { 
-    type: String, 
-    enum: {
-      values: ['income', 'expense'],
-      message: 'Type must be either income or expense'
-    },
-    required: true 
+  categoryId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Category',
+    required: [true, 'Category is required']
   },
-  transactionType: { 
-    type: String, 
-    enum: {
-      values: ['credit', 'debit'],
-      message: 'Transaction type must be either credit or debit'
-    },
-    required: true 
-  },
-  transactionDate: { 
-    type: Date, 
-    default: Date.now,
-    validate: {
-      validator: function(date) {
-        // Don't allow future dates beyond tomorrow
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        return date <= tomorrow;
-      },
-      message: 'Transaction date cannot be in the future'
-    }
-  },
-  date: { 
-    type: Date, 
-    default: Date.now 
-  },
-  mpesaReceiptNumber: { 
-    type: String, 
-    default: function() {
-      return `MANUAL_${Date.now()}`;
-    },
-    trim: true,
-    maxlength: [50, 'M-Pesa receipt number cannot exceed 50 characters']
-  },
-  senderName: { 
-    type: String, 
-    default: '',
-    trim: true,
-    maxlength: [100, 'Sender name cannot exceed 100 characters']
-  },
-  category: { 
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: 'Category', 
-    default: null 
-  },
-  isLabeled: { 
-    type: Boolean, 
-    default: false 
-  },
-  // USER RELATIONSHIP - This is the key addition
   userId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true,
-    index: true // Add index for better query performance
+    required: [true, 'User ID is required']
   },
-  createdAt: { 
-    type: Date, 
-    default: Date.now 
-  },
-  updatedAt: { 
-    type: Date, 
-    default: Date.now 
+  date: {
+    type: Date,
+    default: Date.now,
+    required: true
   }
 }, {
-  // Enable automatic timestamps
-  timestamps: true,
-  // Add some additional options
-  toJSON: { 
-    virtuals: true,
-    transform: function(doc, ret) {
-      // Remove sensitive fields when converting to JSON
-      delete ret.__v;
-      return ret;
-    }
-  },
-  toObject: { virtuals: true }
+  timestamps: true
 });
 
-// Pre-save middleware to update isLabeled based on category
-transactionSchema.pre('save', function(next) {
-  // Auto-update isLabeled based on whether category exists
-  this.isLabeled = !!this.category;
-  
-  // Ensure consistency between type and transactionType
-  if (this.type === 'income' && this.transactionType !== 'credit') {
-    this.transactionType = 'credit';
-  } else if (this.type === 'expense' && this.transactionType !== 'debit') {
-    this.transactionType = 'debit';
-  }
-  
-  // Update the updatedAt field
-  this.updatedAt = new Date();
-  
-  next();
-});
+// Compound indexes for efficient queries
+transactionSchema.index({ userId: 1, categoryId: 1 });
+transactionSchema.index({ userId: 1, date: -1 });
 
-// Pre-save middleware to validate type/transactionType consistency
-transactionSchema.pre('save', function(next) {
-  const isIncomeCredit = this.type === 'income' && this.transactionType === 'credit';
-  const isExpenseDebit = this.type === 'expense' && this.transactionType === 'debit';
-  
-  if (!isIncomeCredit && !isExpenseDebit) {
-    const error = new Error('Type and transactionType must be consistent: income/credit or expense/debit');
-    return next(error);
-  }
-  
-  next();
-});
-
-// Index for better query performance
-transactionSchema.index({ userId: 1, transactionDate: -1 });
-transactionSchema.index({ userId: 1, createdAt: -1 });
-transactionSchema.index({ userId: 1, category: 1 });
-transactionSchema.index({ userId: 1, isLabeled: 1 });
-
-// Virtual for formatted amount (useful for display)
-transactionSchema.virtual('formattedAmount').get(function() {
-  return `KES ${this.amount.toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-});
-
-// Virtual to get the transaction age in days
-transactionSchema.virtual('ageInDays').get(function() {
-  const now = new Date();
-  const transactionDate = this.transactionDate || this.createdAt;
-  const diffTime = Math.abs(now - transactionDate);
-  return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-});
-
-// Static method to get transactions by user
-transactionSchema.statics.findByUser = function(userId, options = {}) {
-  const query = this.find({ userId });
-  
-  if (options.category) {
-    query.where('category').equals(options.category);
-  }
-  
-  if (options.type) {
-    query.where('type').equals(options.type);
-  }
-  
-  if (options.isLabeled !== undefined) {
-    query.where('isLabeled').equals(options.isLabeled);
-  }
-  
-  if (options.startDate && options.endDate) {
-    query.where('transactionDate').gte(options.startDate).lte(options.endDate);
-  }
-  
-  if (options.limit) {
-    query.limit(options.limit);
-  }
-  
-  return query.sort({ transactionDate: -1, createdAt: -1 }).populate('category');
+// Static method to get transactions by category
+transactionSchema.statics.getByCategoryId = function(categoryId, userId) {
+  return this.find({ categoryId, userId })
+    .sort({ date: -1 })
+    .lean();
 };
 
-// Static method to get user statistics
-transactionSchema.statics.getUserStats = async function(userId) {
-  const transactions = await this.find({ userId });
+// Static method to get category total spending
+transactionSchema.statics.getCategoryTotal = function(categoryId, userId) {
+  // Validate inputs
+  if (!categoryId || !userId) {
+    throw new Error('CategoryId and userId are required');
+  }
   
-  const stats = {
-    total: transactions.length,
-    income: 0,
-    expenses: 0,
-    unlabeled: 0,
-    labeled: 0,
-    categories: new Set(),
-    averageTransaction: 0,
-    oldestTransaction: null,
-    newestTransaction: null
-  };
-  
-  transactions.forEach(transaction => {
-    if (transaction.type === 'income') {
-      stats.income += transaction.amount;
-    } else {
-      stats.expenses += transaction.amount;
-    }
+  return this.aggregate([
+    { $match: { categoryId: new Types.ObjectId(categoryId), userId: new Types.ObjectId(userId) } },
+    { $group: { _id: null, total: { $sum: '$amount' } } }
+  ]);
+};
+
+// Post-save middleware to update category spent amount
+transactionSchema.post('save', async function() {
+  try {
+    const Category = mongoose.model('Category');
+    const total = await this.constructor.aggregate([
+      { $match: { categoryId: this.categoryId, userId: this.userId } },
+      { $group: { _id: null, total: { $sum: '$amount' } } }
+    ]);
     
-    if (transaction.isLabeled) {
-      stats.labeled++;
-      if (transaction.category) {
-        stats.categories.add(transaction.category.toString());
-      }
-    } else {
-      stats.unlabeled++;
-    }
-    
-    // Track oldest and newest transactions
-    const transactionDate = transaction.transactionDate || transaction.createdAt;
-    if (!stats.oldestTransaction || transactionDate < stats.oldestTransaction) {
-      stats.oldestTransaction = transactionDate;
-    }
-    if (!stats.newestTransaction || transactionDate > stats.newestTransaction) {
-      stats.newestTransaction = transactionDate;
-    }
-  });
-  
-  stats.balance = stats.income - stats.expenses;
-  stats.averageTransaction = stats.total > 0 ? (stats.income + stats.expenses) / stats.total : 0;
-  stats.labeledPercentage = stats.total > 0 ? Math.round((stats.labeled / stats.total) * 100) : 0;
-  stats.categoriesCount = stats.categories.size;
-  
-  return stats;
-};
-
-// Instance method to toggle labeled status
-transactionSchema.methods.toggleLabeled = function() {
-  this.isLabeled = !this.isLabeled;
-  if (!this.isLabeled) {
-    this.category = null;
+    const totalSpent = total.length > 0 ? total[0].total : 0;
+    await Category.findByIdAndUpdate(this.categoryId, { spent: totalSpent });
+  } catch (error) {
+    console.error('Error updating category spent amount:', error);
   }
-  return this.save();
-};
+});
 
-// Instance method to format for display
-transactionSchema.methods.getDisplayInfo = function() {
-  return {
-    id: this._id,
-    amount: this.formattedAmount,
-    description: this.description,
-    type: this.type,
-    date: this.transactionDate.toLocaleDateString('en-KE'),
-    category: this.category ? this.category.name : 'Uncategorized',
-    isLabeled: this.isLabeled,
-    ageInDays: this.ageInDays
-  };
-};
+// Post-remove middleware to update category spent amount
+transactionSchema.post('findOneAndDelete', async function(doc) {
+  if (doc) {
+    try {
+      const Category = mongoose.model('Category');
+      const total = await mongoose.model('Transaction').aggregate([
+        { $match: { categoryId: doc.categoryId, userId: doc.userId } },
+        { $group: { _id: null, total: { $sum: '$amount' } } }
+      ]);
+      
+      const totalSpent = total.length > 0 ? total[0].total : 0;
+      await Category.findByIdAndUpdate(doc.categoryId, { spent: totalSpent });
+    } catch (error) {
+      console.error('Error updating category spent amount after deletion:', error);
+    }
+  }
+});
 
 const Transaction = mongoose.model('Transaction', transactionSchema);
 

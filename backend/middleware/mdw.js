@@ -161,8 +161,12 @@ const createRateLimiter = (maxRequests = 100, windowMs = 15 * 60 * 1000) => {
   };
 };
 
+// Create an alias for auth
+const auth = authenticateToken;
+
 export {
   authenticateToken,
+  auth, // Add this export
   requireAdmin,
   requireRole,
   requireOwnership,

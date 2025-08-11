@@ -12,11 +12,9 @@ import LandingPage from './pages/LandingPage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import Dashboard from './pages/Dashboard';
-import TransactionsPage from './pages/TransactionsPage';
 import CategoriesPage from './pages/CategoriesPage';
 import ReportsPage from './pages/ReportsPage';
-import PaymentPage from './pages/PaymentPage';
-import FinancialTipsPage from './pages/FinancialTipsPage';
+
 
 
 
@@ -57,11 +55,8 @@ function App() {
                   }
                 >
                   <Route path="/dashboard" element={<Dashboard />} />
-                  <Route path="/transactions" element={<TransactionsPage />} />
                   <Route path="/categories" element={<CategoriesPage />} />
                   <Route path="/reports" element={<ReportsPage />} />
-                  <Route path="/payment" element={<PaymentPage />} />
-                  <Route path="/tips" element={<FinancialTipsPage />} />
                 </Route>
 
                 {/* Catch-all route */}
