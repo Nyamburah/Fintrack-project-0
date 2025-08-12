@@ -6,7 +6,6 @@ import cookieParser from 'cookie-parser';
 
 // Import routes
 import authRoutes from './routes/auth.js';
-import mpesaRoutes from './routes/mpesa.js';
 import categoriesRoutes from './routes/categories.js';
 import transactionsRoutes from './routes/transactions.js'; // ✅ UNCOMMENTED
 
@@ -101,7 +100,6 @@ mongoose.connection.on('disconnected', () => {
 // 🛣️ Routes & Endpoints
 // ---------------------
 app.use('/api/auth', authRoutes);
-app.use('/api/mpesa', mpesaRoutes);
 app.use('/api/categories', categoriesRoutes);
 app.use('/api/transactions', transactionsRoutes); // ✅ ENABLED
 
