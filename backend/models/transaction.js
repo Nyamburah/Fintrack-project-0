@@ -14,7 +14,7 @@ const transactionSchema = new mongoose.Schema({
     trim: true,
     maxlength: [200, 'Description cannot exceed 200 characters']
   },
-  categoryId: {
+  categoryId: {  // Changed from 'category' to 'categoryId' to match frontend expectations
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Category',
     required: [true, 'Category is required']

@@ -21,18 +21,20 @@ router.get('/', async (req, res) => {
     // Add computed fields
     const categoriesWithStats = categories.map(category => ({
       ...category,
-      remaining: category.budget - category.spent,
-      usagePercentage: category.budget > 0 ? (category.spent / category.budget) * 100 : 0
+      remaining: category.budget - (category.spent || 0),
+      usagePercentage: category.budget > 0 ? ((category.spent || 0) / category.budget) * 100 : 0
     }));
 
     console.log(`✅ Retrieved ${categories.length} categories for user ${req.userId}`);
     
+    // Return direct array for frontend compatibility
     res.json(categoriesWithStats);
   } catch (error) {
     console.error('❌ Error fetching categories:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to fetch categories'
+      message: 'Failed to fetch categories',
+      error: error.message
     });
   }
 });
@@ -47,31 +49,39 @@ router.get('/:id', async (req, res) => {
     const category = await Category.findOne({
       _id: req.params.id,
       userId: req.userId
-    });
+    }).lean();
 
     if (!category) {
       return res.status(404).json({
         success: false,
-        error: 'Category not found'
+        message: 'Category not found'
       });
     }
 
+    // Add computed fields
+    const categoryWithStats = {
+      ...category,
+      remaining: category.budget - (category.spent || 0),
+      usagePercentage: category.budget > 0 ? ((category.spent || 0) / category.budget) * 100 : 0
+    };
+
     console.log(`✅ Retrieved category ${category.name} for user ${req.userId}`);
     
-    res.json(category);
+    res.json(categoryWithStats);
   } catch (error) {
     console.error('❌ Error fetching category:', error);
     
     if (error.name === 'CastError') {
       return res.status(400).json({
         success: false,
-        error: 'Invalid category ID format'
+        message: 'Invalid category ID format'
       });
     }
     
     res.status(500).json({
       success: false,
-      error: 'Failed to fetch category'
+      message: 'Failed to fetch category',
+      error: error.message
     });
   }
 });
@@ -89,28 +99,28 @@ router.post('/', async (req, res) => {
     if (!name || !name.trim()) {
       return res.status(400).json({
         success: false,
-        error: 'Category name is required'
+        message: 'Category name is required'
       });
     }
 
     if (name.trim().length > 50) {
       return res.status(400).json({
         success: false,
-        error: 'Category name cannot exceed 50 characters'
+        message: 'Category name cannot exceed 50 characters'
       });
     }
 
     if (description && description.length > 200) {
       return res.status(400).json({
         success: false,
-        error: 'Description cannot exceed 200 characters'
+        message: 'Description cannot exceed 200 characters'
       });
     }
 
     if (budget !== undefined && (isNaN(budget) || budget < 0)) {
       return res.status(400).json({
         success: false,
-        error: 'Budget must be a valid non-negative number'
+        message: 'Budget must be a valid non-negative number'
       });
     }
 
@@ -118,7 +128,7 @@ router.post('/', async (req, res) => {
     if (color && !/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/.test(color)) {
       return res.status(400).json({
         success: false,
-        error: 'Invalid color format. Use hex format like #3B82F6'
+        message: 'Invalid color format. Use hex format like #3B82F6'
       });
     }
 
@@ -131,7 +141,7 @@ router.post('/', async (req, res) => {
     if (existingCategory) {
       return res.status(400).json({
         success: false,
-        error: 'A category with this name already exists'
+        message: 'A category with this name already exists'
       });
     }
 
@@ -141,26 +151,23 @@ router.post('/', async (req, res) => {
       color: color || '#3B82F6',
       budget: Number(budget) || 0,
       description: description ? description.trim() : '',
+      spent: 0, // Initialize spent amount
       userId: req.userId
     };
 
     const category = new Category(categoryData);
-    await category.save();
+    const savedCategory = await category.save();
 
     console.log(`✅ Created category "${category.name}" for user ${req.userId}`);
 
-    // Return category with computed fields
+    // Return category with computed fields (direct object for frontend compatibility)
     const categoryWithStats = {
-      ...category.toObject(),
-      remaining: category.budget - category.spent,
-      usagePercentage: category.budget > 0 ? (category.spent / category.budget) * 100 : 0
+      ...savedCategory.toObject(),
+      remaining: savedCategory.budget - (savedCategory.spent || 0),
+      usagePercentage: savedCategory.budget > 0 ? ((savedCategory.spent || 0) / savedCategory.budget) * 100 : 0
     };
 
-    res.status(201).json({
-      success: true,
-      message: 'Category created successfully',
-      ...categoryWithStats
-    });
+    res.status(201).json(categoryWithStats);
 
   } catch (error) {
     console.error('❌ Error creating category:', error);
@@ -169,13 +176,14 @@ router.post('/', async (req, res) => {
       const validationErrors = Object.values(error.errors).map(err => err.message);
       return res.status(400).json({
         success: false,
-        error: validationErrors[0] || 'Validation failed'
+        message: validationErrors[0] || 'Validation failed'
       });
     }
 
     res.status(500).json({
       success: false,
-      error: 'Failed to create category'
+      message: 'Failed to create category',
+      error: error.message
     });
   }
 });
@@ -198,7 +206,7 @@ router.put('/:id', async (req, res) => {
     if (!category) {
       return res.status(404).json({
         success: false,
-        error: 'Category not found'
+        message: 'Category not found'
       });
     }
 
@@ -207,14 +215,14 @@ router.put('/:id', async (req, res) => {
       if (!name || !name.trim()) {
         return res.status(400).json({
           success: false,
-          error: 'Category name cannot be empty'
+          message: 'Category name cannot be empty'
         });
       }
 
       if (name.trim().length > 50) {
         return res.status(400).json({
           success: false,
-          error: 'Category name cannot exceed 50 characters'
+          message: 'Category name cannot exceed 50 characters'
         });
       }
 
@@ -228,7 +236,7 @@ router.put('/:id', async (req, res) => {
       if (existingCategory) {
         return res.status(400).json({
           success: false,
-          error: 'A category with this name already exists'
+          message: 'A category with this name already exists'
         });
       }
 
@@ -239,7 +247,7 @@ router.put('/:id', async (req, res) => {
       if (color && !/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/.test(color)) {
         return res.status(400).json({
           success: false,
-          error: 'Invalid color format. Use hex format like #3B82F6'
+          message: 'Invalid color format. Use hex format like #3B82F6'
         });
       }
       category.color = color || '#3B82F6';
@@ -249,7 +257,7 @@ router.put('/:id', async (req, res) => {
       if (isNaN(budget) || budget < 0) {
         return res.status(400).json({
           success: false,
-          error: 'Budget must be a valid non-negative number'
+          message: 'Budget must be a valid non-negative number'
         });
       }
       category.budget = Number(budget);
@@ -259,28 +267,24 @@ router.put('/:id', async (req, res) => {
       if (description && description.length > 200) {
         return res.status(400).json({
           success: false,
-          error: 'Description cannot exceed 200 characters'
+          message: 'Description cannot exceed 200 characters'
         });
       }
       category.description = description ? description.trim() : '';
     }
 
-    await category.save();
+    const updatedCategory = await category.save();
 
     console.log(`✅ Updated category "${category.name}" for user ${req.userId}`);
 
-    // Return updated category with computed fields
+    // Return updated category with computed fields (direct object for frontend compatibility)
     const categoryWithStats = {
-      ...category.toObject(),
-      remaining: category.budget - category.spent,
-      usagePercentage: category.budget > 0 ? (category.spent / category.budget) * 100 : 0
+      ...updatedCategory.toObject(),
+      remaining: updatedCategory.budget - (updatedCategory.spent || 0),
+      usagePercentage: updatedCategory.budget > 0 ? ((updatedCategory.spent || 0) / updatedCategory.budget) * 100 : 0
     };
 
-    res.json({
-      success: true,
-      message: 'Category updated successfully',
-      ...categoryWithStats
-    });
+    res.json(categoryWithStats);
 
   } catch (error) {
     console.error('❌ Error updating category:', error);
@@ -288,7 +292,7 @@ router.put('/:id', async (req, res) => {
     if (error.name === 'CastError') {
       return res.status(400).json({
         success: false,
-        error: 'Invalid category ID format'
+        message: 'Invalid category ID format'
       });
     }
 
@@ -296,20 +300,21 @@ router.put('/:id', async (req, res) => {
       const validationErrors = Object.values(error.errors).map(err => err.message);
       return res.status(400).json({
         success: false,
-        error: validationErrors[0] || 'Validation failed'
+        message: validationErrors[0] || 'Validation failed'
       });
     }
 
     res.status(500).json({
       success: false,
-      error: 'Failed to update category'
+      message: 'Failed to update category',
+      error: error.message
     });
   }
 });
 
 /**
  * @route   DELETE /api/categories/:id
- * @desc    Delete category
+ * @desc    Delete category and associated transactions
  * @access  Private
  */
 router.delete('/:id', async (req, res) => {
@@ -322,32 +327,25 @@ router.delete('/:id', async (req, res) => {
     if (!category) {
       return res.status(404).json({
         success: false,
-        error: 'Category not found'
+        message: 'Category not found'
       });
     }
 
-    // Optional: Check if category has associated transactions
-    // You can uncomment this when you implement transactions
-    /*
-    const Transaction = require('../models/transactions');
-    const transactionCount = await Transaction.countDocuments({ categoryId: req.params.id });
-    
-    if (transactionCount > 0) {
-      return res.status(400).json({
-        success: false,
-        error: 'Cannot delete category with associated transactions. Please reassign or delete transactions first.',
-        transactionCount
-      });
-    }
-    */
-
+    // Delete the category
     await Category.findByIdAndDelete(req.params.id);
 
-    console.log(`✅ Deleted category "${category.name}" for user ${req.userId}`);
+    // Also delete associated transactions
+    const Transaction = await import('../models/transaction.js').then(m => m.default);
+    await Transaction.deleteMany({ 
+      category: req.params.id,
+      userId: req.userId 
+    });
+
+    console.log(`✅ Deleted category "${category.name}" and associated transactions for user ${req.userId}`);
 
     res.json({
       success: true,
-      message: 'Category deleted successfully'
+      message: 'Category and associated transactions deleted successfully'
     });
 
   } catch (error) {
@@ -356,52 +354,14 @@ router.delete('/:id', async (req, res) => {
     if (error.name === 'CastError') {
       return res.status(400).json({
         success: false,
-        error: 'Invalid category ID format'
+        message: 'Invalid category ID format'
       });
     }
 
     res.status(500).json({
       success: false,
-      error: 'Failed to delete category'
-    });
-  }
-});
-
-/**
- * @route   GET /api/categories/stats/summary
- * @desc    Get category spending summary
- * @access  Private
- */
-router.get('/stats/summary', async (req, res) => {
-  try {
-    const categories = await Category.find({ userId: req.userId });
-
-    const summary = {
-      totalCategories: categories.length,
-      totalBudget: categories.reduce((sum, cat) => sum + cat.budget, 0),
-      totalSpent: categories.reduce((sum, cat) => sum + cat.spent, 0),
-      overBudgetCount: categories.filter(cat => cat.budget > 0 && cat.spent > cat.budget).length,
-      underBudgetCount: categories.filter(cat => cat.budget > 0 && cat.spent <= cat.budget).length,
-      noBudgetCount: categories.filter(cat => cat.budget === 0).length
-    };
-
-    summary.totalRemaining = summary.totalBudget - summary.totalSpent;
-    summary.overallUsagePercentage = summary.totalBudget > 0 
-      ? (summary.totalSpent / summary.totalBudget) * 100 
-      : 0;
-
-    console.log(`✅ Generated category summary for user ${req.userId}`);
-
-    res.json({
-      success: true,
-      summary
-    });
-
-  } catch (error) {
-    console.error('❌ Error generating category summary:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to generate category summary'
+      message: 'Failed to delete category',
+      error: error.message
     });
   }
 });
@@ -418,7 +378,7 @@ router.patch('/:id/spent', async (req, res) => {
     if (typeof amount !== 'number') {
       return res.status(400).json({
         success: false,
-        error: 'Amount must be a number'
+        message: 'Amount must be a number'
       });
     }
 
@@ -430,28 +390,24 @@ router.patch('/:id/spent', async (req, res) => {
     if (!category) {
       return res.status(404).json({
         success: false,
-        error: 'Category not found'
+        message: 'Category not found'
       });
     }
 
     // Update spent amount (ensure it doesn't go negative)
-    category.spent = Math.max(0, category.spent + amount);
-    await category.save();
+    category.spent = Math.max(0, (category.spent || 0) + amount);
+    const updatedCategory = await category.save();
 
     console.log(`✅ Updated spent amount for category "${category.name}" by ${amount}`);
 
     // Return updated category with computed fields
     const categoryWithStats = {
-      ...category.toObject(),
-      remaining: category.budget - category.spent,
-      usagePercentage: category.budget > 0 ? (category.spent / category.budget) * 100 : 0
+      ...updatedCategory.toObject(),
+      remaining: updatedCategory.budget - (updatedCategory.spent || 0),
+      usagePercentage: updatedCategory.budget > 0 ? ((updatedCategory.spent || 0) / updatedCategory.budget) * 100 : 0
     };
 
-    res.json({
-      success: true,
-      message: 'Category spending updated',
-      ...categoryWithStats
-    });
+    res.json(categoryWithStats);
 
   } catch (error) {
     console.error('❌ Error updating category spending:', error);
@@ -459,13 +415,14 @@ router.patch('/:id/spent', async (req, res) => {
     if (error.name === 'CastError') {
       return res.status(400).json({
         success: false,
-        error: 'Invalid category ID format'
+        message: 'Invalid category ID format'
       });
     }
 
     res.status(500).json({
       success: false,
-      error: 'Failed to update category spending'
+      message: 'Failed to update category spending',
+      error: error.message
     });
   }
 });
